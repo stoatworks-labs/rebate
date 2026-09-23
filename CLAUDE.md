@@ -77,8 +77,10 @@ scanner.
 ## Not done yet
 - **Never loaded into Resolume.** Everything numeric is measured offline on macOS,
   plus an `oxbow` load. The Windows build is CI-only and has never run.
-- Never seen on footage, only on the synthetic card.
-- No user guide, no OpenFX port, no browser demo, no factory presets.
+- Seen on the synthetic card and on Resolume's demo clips (the project video, through
+  `--pipe`), never on camera footage of people or places.
+- No OpenFX port, no browser demo, no factory presets. The user guide is
+  `docs/USER-GUIDE.md`; every claim in it is read from the code, so change both together.
 - `StoatworksAbout.h` and `ATTRIBUTIONS.md` are provisional hand copies with `guide=""`.
 
 ## Diagnostics

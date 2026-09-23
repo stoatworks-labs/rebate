@@ -135,10 +135,13 @@ It has **never been loaded into Resolume**, on either platform. Everything above
 compiled, rendered and measured offline against the real plugin class in a
 headless CGL context, plus an `oxbow` load. How 22 controls in six groups present
 in Arena's inspector, whether the stock list reads well, and what the host's clock
-does to the grain's film frame over a long session are untested. The look has only
-been seen on a synthetic test card, never on footage. The Windows build is CI-only
-and has never run. No OpenFX port and no browser demo, neither in scope for 0.1.0.
-No user guide.
+does to the grain's film frame over a long session are untested. The look has been
+seen on a synthetic test card and on Resolume's bundled demo clips through
+`rbtest --pipe` (for the project video), never on camera footage of people or
+places. The Windows build is CI-only and has never run. No OpenFX port and no
+browser demo, neither in scope for 0.1.0.
+
+The [user guide](docs/USER-GUIDE.md) covers every control, what it does and why.
 
 ## Build
 

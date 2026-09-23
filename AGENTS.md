@@ -363,8 +363,9 @@ and 333×187 by hand.
 - ☠️ **Never loaded into Resolume**, on either platform. Everything was compiled,
   rendered and measured offline against the real plugin class in a headless CGL
   context, plus an `oxbow` load.
-- **Never seen on footage.** Every picture so far is the synthetic test card. The
-  look of skin, foliage and night exteriors through this model is unjudged, and the
+- **Never seen on camera footage.** The pictures so far are the synthetic test card and
+  Resolume's bundled demo clips (CG loops, put through `rbtest --pipe` for the project
+  video). The look of skin, foliage and night exteriors through this model is unjudged, and the
   constants (crossover, impurities, stock γs, age fog, grain N) were chosen by
   reasoning and by eye on the card, not fitted to any real stock.
 - **The clock-unit voting** is readout's, which has met Arena; this plugin has not.
