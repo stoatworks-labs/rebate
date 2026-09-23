@@ -121,7 +121,7 @@ void main()
 // top of the picture -- whatever GL's origin is.
 //---------------------------------------------------------------------------
 const char* const kFilmBody = R"(
-uniform sampler2D Picture;   //the scene, sRGB-encoded, mipmapped, top at uv.y = 1
+uniform sampler2D Picture;   //the scene, sRGB-encoded, bilinear, top at uv.y = 1
 uniform sampler2D Text;      //the edge print, one texel per glyph pixel
 uniform ivec2 Size;
 uniform int Format;          //0 full, 1 roll film, 2 35 mm
@@ -220,9 +220,19 @@ void main()
 		gate = overlap( film.x - h, film.x + h, Gate.x, Gate.z ) / MmPerPixel
 		     * overlap( film.y - h, film.y + h, Gate.y, Gate.w ) / MmPerPixel;
 
-		vec2 inGate = clamp( ( film - Gate.xy ) / ( Gate.zw - Gate.xy ), 0.0, 1.0 );
-		vec2 source = Crop.xy + inGate * Crop.zw;
-		scene       = texture( Picture, vec2( source.x, 1.0 - source.y ) ).rgb;
+		//The scene is reduced into the gate by up to about 1.6x. Four bilinear
+		//taps a quarter of the pixel's footprint either side of its centre
+		//are a box over that footprint -- what a mip level would have given,
+		//without generating one: glGenerateMipmap on a 4K float picture cost
+		//11 ms a frame on this machine, most of the plugin.
+		vec2 inGate    = clamp( ( film - Gate.xy ) / ( Gate.zw - Gate.xy ), 0.0, 1.0 );
+		vec2 source    = Crop.xy + inGate * Crop.zw;
+		vec2 footprint = MmPerPixel / ( Gate.zw - Gate.xy ) * Crop.zw;
+		vec2 q         = 0.25 * footprint;
+		scene = 0.25 * ( texture( Picture, vec2( source.x - q.x, 1.0 - ( source.y - q.y ) ) ).rgb
+		               + texture( Picture, vec2( source.x + q.x, 1.0 - ( source.y - q.y ) ) ).rgb
+		               + texture( Picture, vec2( source.x - q.x, 1.0 - ( source.y + q.y ) ) ).rgb
+		               + texture( Picture, vec2( source.x + q.x, 1.0 - ( source.y + q.y ) ) ).rgb );
 
 		if( Holes != 0 && ( Perturb & 64 ) == 0 )
 			filmPart = 1.0 - holeCoverage( film );

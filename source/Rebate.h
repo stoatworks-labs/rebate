@@ -134,7 +134,7 @@ private:
 	ffglex::FFGLShader scanShader;
 	ffglex::FFGLScreenQuad quad;
 
-	rebate::PassBuffer picture;   ///< the scene, RGBA32F, mipmapped
+	rebate::PassBuffer picture;   ///< the scene, RGBA32F, bilinear
 	rebate::PassBuffer film;      ///< mean coverage per layer, and the region
 	rebate::PassBuffer blocks;    ///< mean channel density per block
 	rebate::PassBuffer levels[ 2 ];///< ping-pong, 2 x 1: never reallocated

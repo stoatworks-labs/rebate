@@ -410,7 +410,7 @@ FFResult Rebate::ProcessOpenGL( ProcessOpenGLStruct* pGL )
 	//---------------------------------------------------------------------
 	const int gridW      = std::min( kGridW, width );
 	const int gridH      = std::min( kGridH, height );
-	const bool allocated = picture.Ensure( width, height, GL_RGBA32F, PassBuffer::Sampling::Mipmapped )
+	const bool allocated = picture.Ensure( width, height, GL_RGBA32F, PassBuffer::Sampling::Linear )
 	                       && film.Ensure( width, height, GL_RGBA32F, PassBuffer::Sampling::Nearest )
 	                       && blocks.Ensure( gridW, gridH, GL_RGBA32F, PassBuffer::Sampling::Nearest )
 	                       && levels[ 0 ].Ensure( 2, 1, GL_RGBA32F, PassBuffer::Sampling::Nearest )
@@ -460,7 +460,8 @@ FFResult Rebate::ProcessOpenGL( ProcessOpenGLStruct* pGL )
 	};
 
 	//---------------------------------------------------------------------
-	// 1. Copy, with a mip chain.
+	// 1. Copy. Float, so a float input survives exactly; no mip chain,
+	// because generating one for a 4K float picture cost 11 ms a frame.
 	//---------------------------------------------------------------------
 	{
 		ScopedFBOBinding fbo( picture.GetGLID(), ScopedFBOBinding::RB_REVERT );
@@ -474,7 +475,6 @@ FFResult Rebate::ProcessOpenGL( ProcessOpenGLStruct* pGL )
 		copyShader.Set( "HalfTexel", 0.5f / static_cast< float >( width ), 0.5f / static_cast< float >( height ) );
 		quad.Draw();
 	}
-	picture.GenerateMipmaps();
 
 	//---------------------------------------------------------------------
 	// 2. The film: exposure and development, to mean coverage.

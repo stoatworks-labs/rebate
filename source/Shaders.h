@@ -5,10 +5,11 @@
 /**
 	The five passes.
 
-	1. **copy** -- the host's input into an RGBA32F texture of ours, with a
-	   mip chain. A float copy so a float input (the harness's HDR wedge)
-	   survives it exactly; mipmapped because the film formats crop and scale
-	   the scene into a gate.
+	1. **copy** -- the host's input into an RGBA32F texture of ours. A float
+	   copy so a float input (the harness's HDR wedge) survives it exactly.
+	   No mip chain: the film formats reduce the scene into the gate by up to
+	   ~1.6x, which four bilinear taps cover, and glGenerateMipmap on a 4K
+	   float texture cost 11 ms a frame here.
 
 	2. **film** -- picture size, RGBA32F. The exposure and the development:
 	   where the pixel is on the strip (gate, rebate, sprocket hole, edge
