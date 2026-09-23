@@ -376,10 +376,9 @@ and 333×187 by hand.
 - **E-6 through a manual scan** uses the same Black/White Point controls, which are
   scaled for a negative's density range; Auto Levels suits E-6 better.
 - **No OpenFX port and no browser demo.** Not required for 0.1.0.
-- **`StoatworksAbout.h` and `ATTRIBUTIONS.md` are provisional hand copies** with
-  `guide=""`, in the shape the fleet's syncs generate; register the project and
-  re-run the syncs before the first release. The About facts were chosen so the
-  button count — and so the parameter count — does not change when regenerated.
+- **`StoatworksAbout.h` and `ATTRIBUTIONS.md` are generated** by stoatworks-backend's
+  `sync-about.py` and `sync-attributions.py` from the website's projects.json and the
+  attribution master lists. Edit those, not these files; the next sync overwrites them.
 - **Nothing has been through a show.**
 
 ---

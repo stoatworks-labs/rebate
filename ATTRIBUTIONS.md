@@ -3,10 +3,36 @@
 Rebate is built on other people's work. This file lists what that work is, who did
 it, and what it is doing here.
 
-It is PROVISIONAL: hand-written in the shape the `stoatworks-backend` sync
-(`scripts/sync-attributions.py`) generates. Rebate is not yet registered in that
-script's lists, so the sync cannot produce this file yet. Once the registration is
-finished the sync overwrites this file; edit it there, not here.
+It is generated — the master lists live in the `stoatworks-backend` repo and are
+pushed out by `scripts/sync-attributions.py`. Edit it there, not here.
+
+## Code we derived from other people's work
+
+Someone else solved this first, and this project would not exist in its current form without their work.
+
+### 5x7 bitmap font — Stoatworks graticule
+
+<https://github.com/stoatworks-labs/graticule>  
+Licence: MIT  
+Copyright: Stoatworks Labs
+
+The 5x7 bitmap font the edge print is drawn from is graticule's, copied unchanged.
+
+### Harness shape, --pipe contract and verify — Stoatworks pitch
+
+<https://github.com/stoatworks-labs/pitch>  
+Licence: MIT  
+Copyright: Stoatworks Labs
+
+The harness shape, the --pipe contract, the verify script and the negative-control pattern are pitch's; the host clock-unit voting is readout's by way of pitch.
+
+### PassBuffer — Stoatworks tinsel
+
+<https://github.com/stoatworks-labs/tinsel>  
+Licence: MIT  
+Copyright: Stoatworks Labs
+
+PassBuffer is tinsel's.
 
 ## Third-party code this project uses
 
@@ -18,7 +44,7 @@ Libraries, SDKs and frameworks the project is built on or bundles.
 Licence: BSD-3-Clause  
 Copyright: FreeFrame
 
-Vendored as a git submodule at external/ffgl, pinned to b1afaf9.
+Vendored as a git submodule at external/ffgl (third_party/ffgl in oxbow).
 
 The plugin ABI itself. An FFGL effect or source is defined by this SDK's headers — there is no other way to be loadable by Resolume Arena and Avenue.
 
@@ -28,7 +54,7 @@ The plugin ABI itself. An FFGL effect or source is defined by this SDK's headers
 Licence: BSD-3-Clause (with Mesa 3-D and Khronos components)  
 Copyright: Milan Ikits, Marcelo E. Magallon and Lev Povalahev
 
-Arrives through the vcpkg manifest on Windows only. Not fetched on macOS.
+Arrives inside the FFGL submodule at external/ffgl/deps/glew-2.1.0. Not fetched separately.
 
 Resolves OpenGL entry points on Windows, where the system headers stop at OpenGL 1.1.
 
@@ -40,29 +66,21 @@ Copyright: the PNG Reference Library authors
 
 Arrives inside the FFGL submodule, under the SDK's CustomThumbnail sample.
 
-Part of the upstream SDK tree rather than something this plugin calls — listed because it is present in the checkout. The harness writes PNGs through the system zlib and not through this.
+Part of the upstream SDK tree rather than something these plugins call directly — listed because it is present in the checkout.
 
-## Within the fleet
+## Inspirations
 
-Not third-party, but owed a line. The 5x7 bitmap font the edge print is drawn
-from is **graticule**'s (`github.com/stoatworks-labs/graticule`, MIT, Stoatworks
-Labs), copied unchanged. The harness shape, the `--pipe` contract, the verify
-script and the negative-control pattern are **pitch**'s; the host clock-unit
-voting is **readout**'s by way of pitch; `PassBuffer` is **tinsel**'s. The idea of
-a subtractive model done in densities comes from **rosette**. The PCG output mix
-used for the grain is the well-known `pcg_hash` construction, written out here
-rather than copied from anyone's source.
+What this set out to be. No code, assets or binaries from any of these were used or examined — the debt is to the idea.
 
-## Science, not code
+### Photographic science of the colour negative
 
-The model is built from textbook photographic science rather than from anyone's
-implementation: the characteristic (H&D) curve and its toe, straight line and
-shoulder; the colour negative's masking couplers and the orange base they make;
-the Nutting/Poisson picture of a developed layer as randomly placed clouds, whose
-covered fraction fluctuates binomially; C-41, E-6 and cross-processing; the
-common 35 mm negative perforation dimensions. No stock's published curves or data
-were used: the five stocks are invented and described by their parameters, and
-no real manufacturer's name or mark appears in the plugin or its edge print.
+Built from textbook photographic science rather than anyone's implementation: the characteristic (H&D) curve and its toe, straight line and shoulder; masking couplers and the orange base they make; the Nutting/Poisson picture of a developed layer; C-41, E-6 and cross-processing; common 35 mm perforation dimensions. No stock's published curves or data were used: the five stocks are invented and described by their parameters, and no manufacturer's name or mark appears in the plugin or its edge print. The idea of a subtractive model done in densities comes from rosette.
+
+## Standards and published specifications
+
+What the implementation is measured against.
+
+- **Melissa E. O'Neill, "PCG: A Family of Simple Fast Space-Efficient Statistically Good Algorithms for Random Number Generation" (Harvey Mudd College, 2014)** — The pcg_hash output mix used for the grain, written out rather than copied from anyone's source.
 
 ## Getting this wrong
 
