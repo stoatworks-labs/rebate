@@ -142,6 +142,16 @@ if [ "$status" -eq 2 ]; then
 else
 	fail "a cue naming no parameter gave exit $status, not 2"
 fi
+# A reader that hangs up early (`| head -c 1`, ffmpeg dying) must end the run
+# with exit 1 and a message, not SIGPIPE's silent 141.
+head -c $(( frame * 20 )) /dev/zero > "$raw"
+"$RBTEST" --pipe --size 64x36 < "$raw" 2>/dev/null | head -c 1 >/dev/null
+status=${PIPESTATUS[0]}
+if [ "$status" -eq 1 ]; then
+	pass "a closed stdout ends the run with exit 1, not SIGPIPE"
+else
+	fail "a closed stdout gave exit $status, not 1"
+fi
 rm -f "$raw" "$cues"
 
 step "sweep"
