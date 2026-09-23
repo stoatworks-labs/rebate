@@ -21,10 +21,12 @@ namespace rebate
     `FFGLFBO.cpp`). `Destroy()` deletes it first.
 
     **It owns its filtering**, because this plugin's buffers want different
-    answers: the scene copy is read between texels and reduced when a film
-    format crops and scales it, so it is mipmapped; the film buffer, the block
-    means and the levels are data read texel for texel with `texelFetch`, and
-    must never be filtered.
+    answers: the scene copy is read between texels when a film format crops
+    and scales it, so it is bilinear -- deliberately without a mip chain,
+    because glGenerateMipmap on a 4K float texture cost 11 ms a frame (see
+    AGENTS.md); the film buffer, the block means and the levels are data read
+    texel for texel with `texelFetch`, and must never be filtered. The
+    Mipmapped mode is tinsel's and is unused here.
 
     Copied from tinsel, where it was written for a glow chain; the mechanism is
     unchanged.

@@ -26,7 +26,7 @@
     machine and not on another is a driver answer, not a source answer.
 
     **A pass buffer that could not be allocated.** This plugin holds two
-    picture-sized float buffers (the scene with its mip chain, and the film's
+    picture-sized float buffers (the scene, and the film's
     layer coverage), and the failure mode when the driver says no is a black
     frame with nothing to explain it. What goes in the log is the size asked
     for, because at 4K those two come to about 180 MB of float texture.
