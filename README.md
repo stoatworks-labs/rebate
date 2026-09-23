@@ -138,8 +138,11 @@ in Arena's inspector, whether the stock list reads well, and what the host's clo
 does to the grain's film frame over a long session are untested. The look has been
 seen on a synthetic test card and on Resolume's bundled demo clips through
 `rbtest --pipe` (for the project video), never on camera footage of people or
-places. The Windows build is CI-only and has never run. No OpenFX port and no
-browser demo, neither in scope for 0.1.0.
+places. The Windows build is CI-only and has never run. No OpenFX port, not in
+scope for 0.1.0. The [browser demo](https://rebate-demo.stoatworks-labs.com/)
+runs the plugin's own five shaders in WebGL2, but its CPU half — the stocks, the
+development, the scanner's profile and the film strip — is a hand port to
+JavaScript, and nothing checks a port but a reader.
 
 The [user guide](docs/USER-GUIDE.md) covers every control, what it does and why.
 

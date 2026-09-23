@@ -97,6 +97,8 @@ The pipeline, in order:
 | `tools/rbtest/` | The offline harness: renders, measures, benchmarks, pipes, dumps shaders. |
 | `tools/sweep.py` | No control is silently dead. |
 | `tools/verify.sh` | All of it, at two rasters, plus the release-time checks done locally. |
+| `demo/` | The browser demo. `plugin.js` holds a copy of every shader piece and of the glyph table, and a PORT of Model, Controls, Frame and the per-frame arithmetic; `vendor/` is the shared kit and is not edited here. |
+| `demo/tools/check_shaders.py` | The demo's copies have not drifted (run by `verify.sh`). |
 
 Five passes: **copy** (float, no mips) → **film** (exposure and development to mean
 coverage, RGBA32F; alpha carries the hole fraction and the picture flag) →
@@ -308,6 +310,11 @@ clean before and after.
   plugin's model, not the harness's expectation.
 - **Shaders are assembled at run time** from one model library, and verify.sh
   compiles what `rbtest --dump-shaders` writes, which is the plugin's own strings.
+- **The browser demo** (2026-09-24): the whole CPU half is ported rather than a
+  subset, because every number the shaders get comes from it; the integer controls
+  are full dropdowns; the page's presets are the user guide's walk and labelled as
+  the page's; the default clip is the synthetic scene, with Ramps and steps second
+  for reading the curve and the grain; `showBackdrop` is off because film is opaque.
 
 ---
 
@@ -375,11 +382,66 @@ and 333×187 by hand.
   sweep; at reductions over 2× it would alias. The formats reduce by at most ~1.6×.
 - **E-6 through a manual scan** uses the same Black/White Point controls, which are
   scaled for a negative's density range; Auto Levels suits E-6 better.
-- **No OpenFX port and no browser demo.** Not required for 0.1.0.
+- **No OpenFX port.** Not required for 0.1.0.
+- **The browser demo's CPU half is a port that nothing checks** — see below.
 - **`StoatworksAbout.h` and `ATTRIBUTIONS.md` are generated** by stoatworks-backend's
   `sync-about.py` and `sync-attributions.py` from the website's projects.json and the
   attribution master lists. Edit those, not these files; the next sync overwrites them.
 - **Nothing has been through a show.**
+
+---
+
+## The browser demo
+
+`demo/` is the page at **rebate-demo.stoatworks-labs.com** (Worker `rebate-demo`,
+`wrangler.toml`, `cf-run npx wrangler deploy`, no build step). Built 2026-09-24 from
+`specs/DEMO-BRIEF.md`, on rosette's and galvo's pattern.
+
+**What runs for real:** the five passes. `plugin.js` carries `kVertexBody`, `kModel`
+and the five pass bodies verbatim, plus `kVersion`, and assembles them exactly as
+`Shaders.cpp`'s `assemble()` does. `check_shaders.py` compares every piece character
+for character, checks each pass is assembled from the same body with or without the
+model on both sides, and compares the 5x7 glyph table row for row with `Font.cpp`.
+The buffers are the plugin's: an RGBA32F film, a ≤ 64×36 RGBA32F block grid, two
+2×1 RGBA32F level buffers ping-ponged and never reallocated, an R8 mipmapped edge
+print read with `textureGrad`.
+
+**What is a port, checked by nobody but a reader:** `Model.cpp` (the stocks,
+`Develop`, `ScannerProfile`, `Inverts`, `UnwantedSum`, the constants in `Model.h`),
+`Controls.cpp` (every conversion, plus the inverses the constructor's defaults go
+through), `Frame.cpp` (`Compute`, `BuildText`, `drawLabel`, the centre crop) and
+the arithmetic in `Rebate::ProcessOpenGL` (speed and age fog per layer, the edge
+print's exposure, leak weights, the grain frame, the levels' α and when they are
+primed). `std::lround` is ported as half-away-from-zero, not `Math.round`. Change
+any of those files and change `plugin.js` by hand. One spot check was made when it
+was built: the unexposed rebate in `View: Negative` reads (175, 108, 74) on the page
+and in `docs/negative.png` from `rbtest` — identical, which exercises the base, the
+mask, the fog, the curve and the sRGB encode together. That is a single sample, not
+a harness.
+
+**What is different, each said on the page as well:**
+
+- **The clock** is the page's transport, handed straight over: no seconds/millis
+  voting. The grain still changes at 24 film frames a second of it and freezes when
+  paused; the levels' step is still clamped at 0.25 s.
+- **Grain Seed and Frame Number** (`FF_TYPE_INTEGER`) are dropdowns listing every
+  value, 0–999 and 0–99, because the kit has no integer control. Every value is
+  reachable, so nothing was thinned (galvo had to thin Trace Size; this did not).
+- **The scene copy** is RGBA32F with a linear filter, which WebGL2 allows only with
+  `OES_texture_float_linear`. Where that is missing the page uses RGBA16F for that
+  one buffer and the disclosure says which this browser got.
+- **The clips are 8-bit**, so the HDR headroom the float copy exists for cannot be
+  shown.
+- **The About block is absent**; the `Perturb` hooks are held at 0, as shipped.
+- **The Presets menu is the page's own**, labelled "Guide: …": the user guide's
+  "Start here" walk, one click per step. The plugin ships none.
+- **No audio caveat** — Rebate has no audio path.
+
+**Not wired yet:** there is no `.github/workflows/deploy.yml` (the siblings have
+one), so a push to main does not redeploy the page — deploy by hand and verify by
+content. And rebate is not yet in `stoatworks-backend/resolume-demo/sync.sh`'s
+repo list, so the kit in `demo/vendor/` was copied by hand from the master and
+`sync.sh --check` does not see it.
 
 ---
 

@@ -15,6 +15,12 @@
 #                 run time from one model library, so the text compiled here is
 #                 what `rbtest --dump-shaders` writes: the exact strings the
 #                 plugin hands the driver.
+#   demo          the browser demo's copies of those shaders, and of the
+#                 glyph table, are still the plugin's, character for
+#                 character. demo/plugin.js necessarily holds a second copy of
+#                 every shader, and two copies drift quietly: the plugin keeps
+#                 working, the page keeps working, and they stop being the same
+#                 effect. Nothing else in this file looks at the page at all.
 #   physics       every harness check, at TWO rasters: 320x180, which is what
 #                 CI renders at, and 1280x720. A check that holds at one raster
 #                 was fitted to it. Each is measured out of the picture:
@@ -100,6 +106,32 @@ else
 	else
 		fail "$bad of $n shaders do not compile"
 	fi
+fi
+
+
+#---------------------------------------------------------------------------
+# The browser demo's copy of the same GLSL.
+#
+# `demo/plugin.js` cannot include a C++ file, so it carries its own copy of
+# every shader piece, and of Font.cpp's glyph table. This compares the two
+# character for character, and checks both sides assemble the five passes the
+# same way -- reformatting counts, deliberately, because "it is only
+# whitespace" is how a real change gets waved through. It says nothing about the
+# demo's PORT of Model.cpp, Controls.cpp and Frame.cpp; only a reader checks
+# that.
+#---------------------------------------------------------------------------
+step "demo: the browser copy of the shaders"
+if [ -f demo/tools/check_shaders.py ]; then
+	log="$( mktemp )"
+	if python3 demo/tools/check_shaders.py >"$log" 2>&1; then
+		pass "$( tail -1 "$log" )"
+	else
+		fail "the demo's shaders have drifted from source/ -- copy the C++ across"
+		grep -v '^ok' "$log" | sed 's/^/      /'
+	fi
+	rm -f "$log"
+else
+	printf '   skipped: no demo/\n'
 fi
 
 
