@@ -29,7 +29,7 @@
     picture-sized float buffers (the scene, and the film's
     layer coverage), and the failure mode when the driver says no is a black
     frame with nothing to explain it. What goes in the log is the size asked
-    for, because at 4K those two come to about 180 MB of float texture.
+    for, because at 4K those two come to about 265 MB of float texture.
 */
 namespace rebate::diag
 {
