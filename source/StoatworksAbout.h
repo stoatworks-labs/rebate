@@ -15,7 +15,7 @@ namespace stoatworks::about
 {
     inline constexpr auto name = "Rebate";
     inline constexpr auto slug = "rebate";
-    inline constexpr auto hook = "Colour negative film, developed and scanned, for Resolume";
+    inline constexpr auto hook = "Colour negative film, and its scan, for Resolume";
     inline constexpr auto licence = "MIT";
     inline constexpr auto guide = "https://stoatworks-labs.com/software/rebate/guide/";
     inline constexpr auto page = "https://stoatworks-labs.com/software/rebate/";
