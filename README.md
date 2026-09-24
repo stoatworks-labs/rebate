@@ -10,9 +10,11 @@
 > raises γ × 1.15 and fog by 0.03, a light leak rises and saturates on the
 > shoulder and is warm, cross-processed film scans warm where the model says, the
 > sprocket holes are black — with eleven negative controls that prove each check
-> can fail. It has **never been loaded into Resolume**. It is loaded by
+> can fail. It has **never been loaded into Resolume on macOS**, where it is loaded by
 > [oxbow](https://github.com/stoatworks-labs/oxbow), which is a real FFGL host and
-> is not Resolume. See [Status](#status).
+> is not Resolume. On Windows, a build of v0.1.0 loads, registers and renders in
+> Resolume Arena 7.27.1 with every control as declared, on software rendering. See
+> [Status](#status).
 
 Colour negative film, and the scan of it, as an FFGL effect for
 [Resolume](https://resolume.com) Arena and Avenue.
@@ -129,16 +131,25 @@ Render cost at the defaults, best of three runs of 60 frames after a warm-up,
 a 60 fps frame. Auto Levels adds its block reduction, about 0.6 ms at 4K. macOS
 figures only.
 
+### In Resolume, on Windows
+
+**Resolume Arena 7.27.1** (win-lab, Mesa llvmpipe, no GPU, 2026-09-24): a CI build of
+v0.1.0 loads from Extra Effects, registers as `SW Rebate` / `RB01` / effect, all 28 host
+controls match the declaration in name, order, type, range and default, it renders, and
+Arena's log stays clean: 9 of 9 of the fleet gate's checks. 22 controls moved the
+picture, 7 of them under a precondition; Grain Seed read inconclusive. Software
+rendering says nothing about a GPU or about speed.
+
 ### Not established
 
-It has **never been loaded into Resolume**, on either platform. Everything above was
-compiled, rendered and measured offline against the real plugin class in a
+It has **never been loaded into Resolume on macOS**. Everything above the Windows
+section was compiled, rendered and measured offline against the real plugin class in a
 headless CGL context, plus an `oxbow` load. How 22 controls in six groups present
-in Arena's inspector, whether the stock list reads well, and what the host's clock
+in Arena's inspector on a Mac, whether the stock list reads well, and what the host's clock
 does to the grain's film frame over a long session are untested. The look has been
 seen on a synthetic test card and on Resolume's bundled demo clips through
 `rbtest --pipe` (for the project video), never on camera footage of people or
-places. The Windows build is CI-only and has never run. No OpenFX port, not in
+places. No OpenFX port, not in
 scope for 0.1.0. The [browser demo](https://rebate-demo.stoatworks-labs.com/)
 runs the plugin's own five shaders in WebGL2, but its CPU half — the stocks, the
 development, the scanner's profile and the film strip — is a hand port to

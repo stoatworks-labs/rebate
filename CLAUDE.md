@@ -76,8 +76,10 @@ scanner.
 - FFGL id is `RB01`, display name `SW Rebate`.
 
 ## Not done yet
-- **Never loaded into Resolume.** Everything numeric is measured offline on macOS,
-  plus an `oxbow` load. The Windows build is CI-only and has never run.
+- **Never loaded into Resolume on macOS.** Everything numeric is measured offline on
+  macOS, plus an `oxbow` load. The Windows CI build of v0.1.0 passed the Arena gate
+  9 of 9 on win-lab (Arena 7.27.1, llvmpipe) on 2026-09-24; Grain Seed read
+  inconclusive there.
 - Seen on the synthetic card and on Resolume's demo clips (the project video, through
   `--pipe`), never on camera footage of people or places.
 - No OpenFX port, no factory presets.

@@ -25,8 +25,10 @@ captured from Resolume. Portrait 400 on a 35 mm strip, with a leak from the righ
 > every unclipped step of a cross-processed wedge scans R > G > B; the sprocket holes and the
 > rebate are exactly black in the positive. Eleven deliberately broken versions of the model
 > were each caught by those checks. All 22 controls measurably change the picture. It **has not
-> been loaded into Resolume yet**. The one host it has run in is the fleet's own test host,
-> `oxbow`, for 120 frames. The only pictures anyone has judged it on are a synthetic test card
+> been loaded into Resolume on macOS yet**. The one host it has run in there is the fleet's own
+> test host, `oxbow`, for 120 frames. On Windows, a build of v0.1.0 loads, registers and renders
+> in Resolume Arena 7.27.1, with every control matching what the plugin declares — on software
+> rendering, so that says nothing about a GPU. The only pictures anyone has judged it on are a synthetic test card
 > and Resolume's own demo clips put through the harness.
 > Try it on a spare layer before you put it in a show.
 >
@@ -400,8 +402,9 @@ if it could not be allocated.
 
 ## Known limits
 
-- **Not loaded into Resolume yet**, and nothing has driven the controls in a host. How 22
-  controls in six groups read in the inspector and what a long session's clock does to the grain
+- **Not loaded into Resolume on macOS yet**, and nothing has driven the controls in a show. On
+  Windows it loads and renders in Arena, on software rendering, with every control as declared.
+  How 22 controls in six groups read in the inspector on a Mac and what a long session's clock does to the grain
   are untested.
 - **The stocks are invented**, described by their parameters (γ, grain sites, fog, age), not
   measured from any real film. The constants were chosen by reasoning and by eye on a test card.
@@ -413,9 +416,10 @@ if it could not be allocated.
   formats need (at most about 1.6×).
 - **The rest of the strip is unexposed**: no neighbouring frames either side.
 - **The host clock handling has only met the harness's clock.** It is the same approach as the
-  fleet's readout effect, which has met Arena. This effect has not.
+  fleet's readout effect, which has met Arena. This effect has too, on Windows, but nothing
+  there checked its clock.
 - **Not verified at 4K**, only timed there.
-- **No presets**, no OpenFX version and no browser demo. The Stock menu is the nearest thing to a
+- **No presets** and no OpenFX version. The Stock menu is the nearest thing to a
   preset list.
 
 ---

@@ -10,7 +10,7 @@ tell anybody this works.
 
 Colour negative film, and the scan of it, as an FFGL 2.1 effect (`RB01`, shown as
 `SW Rebate`) for Resolume Arena and Avenue. C++17 + GLSL 4.10, CMake, universal
-macOS `.bundle` and a Windows `.dll`. MIT, intended home
+macOS `.bundle` and a Windows `.dll`. MIT, public at
 `github.com/stoatworks-labs/rebate`.
 
 Built 2026-09-23 in one session from the fleet's templates and
@@ -367,16 +367,23 @@ and 333×187 by hand.
 
 ### Assumed, or not done
 
-- ☠️ **Never loaded into Resolume**, on either platform. Everything was compiled,
+- ☠️ **Never loaded into Resolume on macOS.** Everything numeric was compiled,
   rendered and measured offline against the real plugin class in a headless CGL
-  context, plus an `oxbow` load.
+  context, plus an `oxbow` load. On Windows, v0.1.0's CI build passed the fleet
+  Arena gate 9 of 9 in Arena 7.27.1 on llvmpipe (2026-09-24): it loads, registers as
+  `SW Rebate` / `RB01` / effect, all 28 host controls match the declaration, it
+  renders and the log is clean. 22 controls moved the picture (7 under a
+  precondition); Grain Seed read inconclusive.
 - **Never seen on camera footage.** The pictures so far are the synthetic test card and
   Resolume's bundled demo clips (CG loops, put through `rbtest --pipe` for the project
   video). The look of skin, foliage and night exteriors through this model is unjudged, and the
   constants (crossover, impurities, stock γs, age fog, grain N) were chosen by
   reasoning and by eye on the card, not fitted to any real stock.
-- **The clock-unit voting** is readout's, which has met Arena; this plugin has not.
-- **The Windows build is CI-only** and CI cannot run yet.
+- **The clock-unit voting** is readout's, which has met Arena; this plugin has met it
+  only in the Windows gate, which does not check the clock.
+- **Windows has only met a software renderer.** CI builds it on GitHub, and Arena on
+  win-lab's llvmpipe is the one host it has run in; that says nothing about a GPU or
+  about speed.
 - **Not verified at 4K**, only benchmarked there.
 - **The film formats' scene reduction** (four bilinear taps) is unmeasured beyond the
   sweep; at reductions over 2× it would alias. The formats reduce by at most ~1.6×.
