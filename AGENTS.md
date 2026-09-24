@@ -444,11 +444,11 @@ a harness.
   "Start here" walk, one click per step. The plugin ships none.
 - **No audio caveat** — Rebate has no audio path.
 
-**Not wired yet:** there is no `.github/workflows/deploy.yml` (the siblings have
-one), so a push to main does not redeploy the page — deploy by hand and verify by
-content. And rebate is not yet in `stoatworks-backend/resolume-demo/sync.sh`'s
-repo list, so the kit in `demo/vendor/` was copied by hand from the master and
-`sync.sh --check` does not see it.
+**Deploying:** `.github/workflows/deploy.yml` redeploys the page on a push to main
+(since 8facde7). While the Actions quota blocks private-repo runs, deploy by hand
+with `cf-run npx wrangler deploy` and verify by content either way. Rebate is on
+`stoatworks-backend/resolume-demo/sync.sh`'s repo list (since bf8dbf1), so
+`demo/vendor/` is refreshed by the sync and `sync.sh --check` sees it.
 
 ---
 
