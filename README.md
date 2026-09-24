@@ -111,6 +111,13 @@ frame. Real development has adjacency effects, interlayer inhibition and a
 coupler chemistry this does not model, and a real lab scanner has a colour
 matrix and a tone curve of its own that here are one levels step and one gamma.
 
+[![Rebate — colour negative film, and its scan, for Resolume](docs/video-thumb.png)](https://www.youtube.com/watch?v=E0fywpoLngg)
+
+*[Watch it](https://www.youtube.com/watch?v=E0fywpoLngg) — 56 seconds: the clip on its 35 mm strip in a black rebate, the orange negative the scanner divides out, a light leak through the base, three stops under to three over through the curve, an expired roll's blue shadows, grain loudest in the mid-tones, and cross-processing. Every frame is the real plugin's output: an FFGL plugin has no window,
+so the footage is rendered by this repository's own offline harness
+(`rbtest --pipe`, driven by a cue sheet) rather than filmed off a screen, and
+the clips are Resolume's bundled demo media.*
+
 ## Controls
 
 | Group | |
