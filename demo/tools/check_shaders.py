@@ -39,8 +39,10 @@ never looks at the JS one.
 
 Nothing here checks the *ported* half. `develop`, `scannerProfile`,
 `computeGeometry`, `buildText` and every conversion in plugin.js are a hand
-translation of Model.cpp, Frame.cpp, Controls.cpp and Rebate::ProcessOpenGL,
-and only a reader can tell whether they still agree. When you change one of
+translation of Model.cpp, Frame.cpp, Controls.cpp, render::Prepare in
+Render.cpp and Rebate::ProcessOpenGL, and only a reader can tell whether they
+still agree. (Render.cpp's CPU passes are the OpenFX build's copy of the
+shaders, and `rbtest --cpu` checks those; the page uses the shaders themselves.) When you change one of
 those, change plugin.js too -- a wrong number there shows up on the page as a
 film that is subtly the wrong colour, which nobody will notice.
 """

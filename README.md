@@ -13,11 +13,15 @@
 > can fail. It has **never been loaded into Resolume on macOS**, where it is loaded by
 > [oxbow](https://github.com/stoatworks-labs/oxbow), which is a real FFGL host and
 > is not Resolume. On Windows, a build of v0.1.0 loads, registers and renders in
-> Resolume Arena 7.27.1 with every control as declared, on software rendering. See
+> Resolume Arena 7.27.1 with every control as declared, on software rendering. The
+> [OpenFX build](#openfx--resolve-vegas-nuke-natron) renders the same film on the CPU
+> and is checked against the shaders pixel for pixel, but has only ever run in the
+> fleet's command-line OFX test host — never in Resolve, Vegas, Nuke or Natron. See
 > [Status](#status).
 
 Colour negative film, and the scan of it, as an FFGL effect for
-[Resolume](https://resolume.com) Arena and Avenue.
+[Resolume](https://resolume.com) Arena and Avenue, and as an OpenFX plugin for
+DaVinci Resolve, Vegas, Nuke and Natron.
 
 ![A test card on a strip of 35 mm colour negative, scanned and inverted: fine grain, a warm light leak burning in from the right edge across the rebate, sprocket holes, and edge print reading PT400, 11A, >12 and 12A](docs/hero.png)
 
@@ -135,6 +139,66 @@ profile, on a 35 mm strip. Manual rather than auto so that Exposure, Age and Cro
 do what they say out of the box; turn on Auto Levels for footage that needs the
 lab's help.
 
+## OpenFX — Resolve, Vegas, Nuke, Natron
+
+The same film also builds as an OpenFX plugin, **Rebate** in the **Stoatworks**
+group, for DaVinci Resolve, Vegas Pro, Nuke and Natron. It renders on the CPU
+across the host's threads. The stocks, the curves,
+the scanner's profile, every control's conversion, the rebate's geometry, the edge
+print and the per-frame arithmetic are the same C++ the Resolume build runs; the
+per-pixel passes are a line-for-line copy of its shaders (`source/Render.cpp`), and
+`rbtest --cpu` renders both and compares them on every `tools/verify.sh`. Same
+controls, same groups, same 0..1 ranges and defaults, so the
+[user guide](docs/USER-GUIDE.md) covers both.
+
+Take the `rebate-ofx-*` zip for your platform from a release that carries one (the
+first is the release after v0.1.0) and copy `Rebate.ofx.bundle` into the standard
+OpenFX folder, then restart the host:
+
+```
+macOS    /Library/OFX/Plugins/
+Windows  C:\Program Files\Common Files\OFX\Plugins\
+Linux    /usr/OFX/Plugins/
+```
+
+The macOS build is universal; the Linux build is x86_64 against glibc 2.28, so it
+loads on Rocky 8, the oldest Linux Resolve supports.
+
+**Colour.** Like the Resolume build, Rebate takes its input as display-encoded
+picture (sRGB / Rec.709-style), decodes it to light itself, and encodes its output
+the same way: in Resolve, use it in a display-referred (gamma-encoded) part of the
+grade, or convert to that around it in a scene-linear or ACES pipeline. A float
+clip goes through in float from end to end — no 8-bit step anywhere — and values
+above 1 are scene light above white, which the curve's shoulder takes. 8- and
+16-bit clips are widened to float once and an integer output is rounded once, at
+the end. Transparent pixels are no light (premultiplied colour is the scene); the
+scan is opaque.
+
+**What differs from the Resolume build, and why:**
+
+- **Auto Levels measures every frame on its own.** The Resolume build settles the
+  scanner's levels over a quarter of a second, a one-pole filter on each frame's
+  least and most dense blocks — which integrates over the frames the host has shown
+  it, in order. An OpenFX host renders frames in any order, alone and concurrently,
+  so there is nothing to integrate from: the OFX build takes exactly the measurement
+  the Resolume build primes on, and has no smoothing. A cut is levelled at once
+  rather than over a quarter second. Off by default in both. The plugin's
+  description says so.
+- **The grain runs on timeline time:** 24 film frames per second of timeline,
+  `floor( frame / frame rate × 24 )`, so a frame grains the same way however and in
+  whatever order it is rendered. The Resolume build takes seconds from the host's
+  clock.
+- **A reduced render scale** (a proxy or draft render) shrinks the grain cell with
+  the picture, so the reduced render point-samples the full render's grain.
+- **Texture filtering is exact float.** A GPU filters with fixed-point weights (the
+  Apple GPU this was measured on rounds them to 8 bits), so in the 35 mm and 6x6
+  formats the two builds differ by a few 8-bit steps along hard edges in the scene
+  and in the edge print: 0.2–0.7% of pixels on a deliberately hard-edged 1080p
+  card, worst 18 of 255 under Cross. In Full, which reads the scene unfiltered, they
+  differ in 12 pixels of 2 million. See [Status](#status).
+- **No audio, beat sync or event buttons** to drop — the Resolume build has none.
+  The About group is OFX's own: a credit line and real buttons.
+
 ## Status
 
 **v0.1.0, and honestly early — 23 September 2026.**
@@ -188,11 +252,31 @@ in Arena's inspector on a Mac, whether the stock list reads well, and what the h
 does to the grain's film frame over a long session are untested. The look has been
 seen on a synthetic test card and on Resolume's bundled demo clips through
 `rbtest --pipe` (for the project video), never on camera footage of people or
-places. No OpenFX port, not in
-scope for 0.1.0. The [browser demo](https://rebate-demo.stoatworks-labs.com/)
+places. The [browser demo](https://rebate-demo.stoatworks-labs.com/)
 runs the plugin's own five shaders in WebGL2, but its CPU half — the stocks, the
 development, the scanner's profile and the film strip — is a hand port to
 JavaScript, and nothing checks a port but a reader.
+
+### The OpenFX build
+
+On `main`, not yet in a release. Measured on the same machine on 2026-10-03:
+
+| check | result |
+| --- | --- |
+| `rbtest --cpu` | the CPU passes against the real plugin's shaders at 16 settings (every Format, both Views, every Process, both scans, a leak, Mix, and float wedges carrying encoded values up to 4.6), with the CPU's texture filter matched to the one this GPU is **measured** to have (8-bit weights, rounded). Outside the edge print the 99.9th percentile of the difference is at most **0.0002** of an 8-bit step, and at most **39** pixels in a million (4 at 1080p) differ by more than half a step — grain cells flipped by ULP-level differences in exp and log. The edge print, magnified (above about 245 rows), stays under 0.13 of a step at the 99.9th percentile; minified, the GPU reads a mip chain the GL spec leaves to the driver, so it is reported and not bounded. With exact float filtering, as the plugin ships, at most **0.1%** of pixels differ by more than half a step. A control rendering the GPU at Portrait 400 and the CPU at Fine 100 fails at 40% of pixels. Passes at 320×180, 640×360, 1280×720 and 1920×1080 on the M4 Max, and at 320×180 and 640×360 on Apple's software renderer (12-bit weights; at most 97 per million) |
+| the OpenFX bundle in a host | the fleet's CPU OFX test host (ofxprobe, from resolume-ofx-bridge) loads `com.stoatworks.rebate` as Rebate / Stoatworks with every control, group and the About block, and renders. A hard-edged 1920×1080 colour card through the OFX bundle is **byte-identical** to the same card through `rbtest --pipe --engine cpu` (the harness running `render::Apply` itself) at all 15 settings tried, so the OFX marshalling adds nothing |
+| against the Resolume build | the same card through the FFGL plugin (`rbtest --pipe`) and the OFX bundle at 15 settings. In Full, which reads the scene unfiltered, **12** and **127** pixels of 2,073,600 differ (all but five by 1/255; the five are grain). In the film formats **0.19–0.72%** of pixels differ, worst **18/255** (Cross) at the default grain, all on the scene's hard edges and in the edge print; at Grain Amount 1, 0.05–0.10% differ by up to 53/255, where an edge's filtered value moves a grain site across its threshold. That is the GPU's 8-bit filter weights: the CPU render with its weights rounded the same way differs from the FFGL plugin at **0.001–0.03%** of pixels (0.28% under Mix 0.5, by one step). A control (the GPU at Portrait 400, OFX at Fine 100) differs at **39%** of pixels |
+| determinism | frame 9 of a changing sequence is byte-identical rendered alone, after frames 0–8 in one instance, and after 9, 3, 11 out of order; at 25 fps frames 0 and 1 share film frame 0 and grain identically, frame 2 does not |
+| float | a float render and an 8-bit render of an 8-bit card are byte-identical after the host's rounding; `rbtest --cpu`'s float wedges carry values above 1 through both builds alike |
+| bundle | universal, exports `OfxGetPlugin`, `CFBundleExecutable` is on disk, ad-hoc signs; CI builds it for Windows x64 and for Linux on AlmaLinux 8, and a stock Rocky 8 container dlopens it and lists its plugin |
+| render cost | **~30 ms** per 1920×1080 frame on 16 threads (best of three runs of 10), **~250 ms** on one; **~40 ms** in the test host, which caps itself at 8 threads |
+
+**Not established:** it has **never been loaded in DaVinci Resolve, Vegas, Nuke or
+Natron**, on any platform; the only host it has met is the command-line test host,
+which renders at scale 1, never tiles, and hands over 8-bit or float RGBA. 16-bit
+clips, RGB-only clips, unpremultiplied clips and reduced render scales are handled
+in the code and have not been exercised by any host. The Windows build has only
+been compiled, and the Linux build only loaded.
 
 The [user guide](docs/USER-GUIDE.md) covers every control, what it does and why.
 
@@ -211,6 +295,11 @@ cmake --install build     # into ~/Documents/Resolume Arena/Extra Effects
 macOS builds are universal (Apple Silicon + Intel) by default; add
 `-DCMAKE_OSX_ARCHITECTURES=arm64` for a faster dev build. Windows needs GLEW via vcpkg.
 
+The same build also produces `build/Rebate.ofx.bundle`, the OpenFX plugin; copy it
+into `/Library/OFX/Plugins` by hand. `-DBUILD_OFX=OFF` skips it, and
+`-DREBATE_BUILD_FFGL=OFF` builds it alone with nothing but a compiler — no FFGL
+SDK, no GLEW — which is how the Linux job builds it.
+
 ## Building and testing
 
 The offline harness renders the real plugin class headlessly, on a synthetic 60 fps
@@ -222,7 +311,9 @@ clock:
 ./build/rbtest --curve --push --mask --grain           # each claim, measured
 ./build/rbtest --leak --cross --rebate --seed --resize
 ./build/rbtest --negative                              # and the checks can fail
+./build/rbtest --cpu                                   # the OpenFX build's CPU copy agrees with the shaders
 ./build/rbtest --bench                                 # 720p through 4K
+./build/rbtest --bench-cpu --size 1920x1080            # the OpenFX build's CPU render
 python3 tools/sweep.py                                 # no control is silently dead
 tools/verify.sh                                        # all of it, on a fresh universal build
 ```
@@ -235,6 +326,9 @@ ffmpeg -i in.mov -f rawvideo -pix_fmt rgba - \
   | ./build/rbtest --pipe --size 1920x1080 --script cues.txt \
   | ffmpeg -f rawvideo -pix_fmt rgba -s 1920x1080 -i - out.mov
 ```
+
+`--engine cpu` sends the same frames through the OpenFX build's CPU render instead
+of GL, with no host.
 
 See [`CLAUDE.md`](CLAUDE.md) for the full command reference and
 [`AGENTS.md`](AGENTS.md) for the model and the traps.

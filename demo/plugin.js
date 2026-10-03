@@ -36,9 +36,11 @@
  *   - `source/Frame.cpp` — `Compute()` (where the gate, the perforations and the
  *     print bands sit on the strip, and the centre crop) and `BuildText()` (the
  *     edge print, drawn into a small texture).
- *   - the per-frame arithmetic in `Rebate::ProcessOpenGL` — speed and age fog per
- *     layer, the edge print's exposure, the leak's weights, the grain's film
- *     frame, the levels' smoothing step, when the levels are primed.
+ *   - the per-frame arithmetic in `render::Prepare` (`source/Render.cpp`, which
+ *     `Rebate::ProcessOpenGL` and the OpenFX build both call) — speed and age fog
+ *     per layer, the edge print's exposure, the leak's weights, the grain's film
+ *     frame — and, in `ProcessOpenGL` itself, the levels' smoothing step and when
+ *     the levels are primed.
  *
  * The C++ does that arithmetic in float and double; this does it in double and
  * the uniforms round it to float on the way in, as the plugin's casts do.
@@ -1001,8 +1003,8 @@ const GLYPHS = [
 ];
 
 //---------------------------------------------------------------------------
-// The chain — a port of Rebate::ProcessOpenGL, the plugin's five passes in the
-// plugin's order.
+// The chain — a port of Rebate::ProcessOpenGL (and the render::Prepare it
+// calls), the plugin's five passes in the plugin's order.
 //---------------------------------------------------------------------------
 
 /** `kGridW`, `kGridH`: the block grid the scanner's auto levels look at. */

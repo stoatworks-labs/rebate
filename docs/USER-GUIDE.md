@@ -1,7 +1,9 @@
 # Rebate user guide
 
 Rebate is **colour negative film, and the scan of it, for [Resolume](https://resolume.com) Arena
-and Avenue**, as an FFGL effect. It is not a lookup table. The clip is treated as the scene: it
+and Avenue**, as an FFGL effect — and for DaVinci Resolve, Vegas, Nuke and Natron as an OpenFX
+plugin with the same controls (see [In Resolve, Vegas, Nuke and Natron](#in-resolve-vegas-nuke-and-natron)).
+It is not a lookup table. The clip is treated as the scene: it
 exposes the three layers of a colour negative, each layer is developed along a characteristic
 curve into dye, the dyes' impurities are cancelled by an orange mask, the dye is realised as
 grain, and then the orange negative is scanned and inverted the way a lab scanner does it. The
@@ -32,6 +34,10 @@ captured from Resolume. Portrait 400 on a 35 mm strip, with a leak from the righ
 > and Resolume's own demo clips put through the harness.
 > Try it on a spare layer before you put it in a show.
 >
+> **The OpenFX build has never been loaded in Resolve, Vegas, Nuke or Natron.** It renders
+> the same film on the CPU and is checked against the shaders pixel for pixel, but the only
+> host it has met is the fleet's command-line OpenFX test host.
+>
 > This codebase was created with AI assistance, directed and reviewed by a human author.
 
 ---
@@ -53,6 +59,21 @@ The macOS download is a universal build (Apple silicon and Intel), as a `.dmg` o
 **Developer ID-signed and notarised**, so the bundle simply loads. The
 Windows download is an x64 installer or a `.zip`. It is not code-signed, so the installer trips
 SmartScreen once: **More info** → **Run anyway**.
+
+### OpenFX: Resolve, Vegas, Nuke, Natron
+
+The OpenFX build is a separate download, `rebate-ofx-<platform>.zip`, from the first release
+that carries one (the release after v0.1.0). Copy `Rebate.ofx.bundle` into the system's OpenFX
+folder and restart the host:
+
+```
+macOS    /Library/OFX/Plugins/
+Windows  C:\Program Files\Common Files\OFX\Plugins\
+Linux    /usr/OFX/Plugins/
+```
+
+It declares itself as **Rebate**, in a group called **Stoatworks**; where the host files it
+among its OpenFX effects is the host's choice.
 
 ---
 
@@ -131,6 +152,11 @@ still when the host's clock stops.
 
 For the first few frames after it loads, the effect runs on its own steady clock while it works
 out whether the host counts time in seconds or milliseconds. Then it switches to the host's.
+
+In the OpenFX build the clock is the **timeline**: the film frame is the frame number over the
+clip's frame rate, times 24. A frame always grains the same way, however often and in whatever
+order the host renders it. At 25 or 30 fps some neighbouring timeline frames share a film frame
+and grain identically, exactly as they would if film at 24 had been transferred.
 
 ---
 
@@ -272,7 +298,8 @@ specular highlight does not set the white), smoothed over about a quarter of a s
 its first measurement outright on the first frame and whenever it is switched on, so there is no
 fade in from black. It removes most of an exposure change, an age cast and a missing mask, as a
 lab does, and it is the right setting for E-6 and for footage that needs help. Black Point and
-White Point do nothing while it is on.
+White Point do nothing while it is on. **In the OpenFX build every frame is measured on its own**,
+with no smoothing — see [In Resolve, Vegas, Nuke and Natron](#in-resolve-vegas-nuke-and-natron).
 
 **Black Point** — for a negative, the density above the film's base (as the scanner's profile
 expects it) that prints black: 0 to 0.6, linear, default 0.05. Raise it and the shadows crush.
@@ -323,6 +350,37 @@ transparency. Below 1 the output, alpha included, is mixed towards the clip's.
 
 ---
 
+## In Resolve, Vegas, Nuke and Natron
+
+The OpenFX build is the same film: the same stocks, curves, mask, grain, leak, scanner and
+rebate, the same controls in the same six groups with the same ranges and defaults, so
+everything above applies. It renders on the CPU instead of the GPU, and its per-pixel arithmetic
+is a line-for-line copy of the shaders that is rendered against them on every check of the
+source.
+
+**Colour.** Rebate treats its input as display-encoded picture (sRGB / Rec.709-style), decodes
+it to light itself, and encodes its output the same way. In Resolve, put it where the picture is
+gamma-encoded, or convert to that around it in a scene-linear or ACES grade. A float clip goes
+through in float from end to end, and values above 1 are light above white, which the curve's
+shoulder takes. Transparent parts of a clip are no light: unexposed film.
+
+What is different, and why:
+
+- **Auto Levels measures every frame on its own.** In Resolume it settles over about a quarter
+  of a second, following the frames as they play. An OpenFX host renders frames in any order and
+  several at once, so there is no previous frame to follow; each frame gets exactly the
+  measurement Resolume's takes on the frame it starts on, and a cut is levelled at once.
+- **The grain follows the timeline**, at 24 film frames a second of it (see *Time comes from the
+  host*).
+- **A proxy or reduced-resolution render** shrinks the grain cells with the picture, so it shows
+  the full render's grain at its own resolution.
+- **Edges in the 35 mm and 6x6 formats can differ by a few levels** from the Resolume build: a
+  GPU's texture filter rounds its weights, the CPU's does not, and the formats filter the scene
+  into the frame and the edge print onto the film. Full reads the picture unfiltered and agrees
+  but for the odd grain cell and one-level rounding.
+- **The About group** has a credit line and real buttons that open this guide, the project page,
+  the source and the support page.
+
 ## How it works
 
 Once a frame, in up to five passes:
@@ -359,6 +417,10 @@ grain sites, so Fine 100 (64) does the most work of the five; that was not timed
 the effect cannot allocate its buffers it does nothing and says so in the log.
 
 Nothing was timed inside Resolume, and nothing was timed on Windows.
+
+The **OpenFX build** renders on the CPU: about **30 ms** a 1920×1080 frame across 16 threads of
+the same M4 Max at the defaults (about 250 ms on one thread), and about 40 ms in the fleet's test
+host, which uses 8. Nothing was timed inside Resolve, Vegas, Nuke or Natron.
 
 ---
 
@@ -419,8 +481,11 @@ if it could not be allocated.
   fleet's readout effect, which has met Arena. This effect has too, on Windows, but nothing
   there checked its clock.
 - **Not verified at 4K**, only timed there.
-- **No presets** and no OpenFX version. The Stock menu is the nearest thing to a
-  preset list.
+- **No presets.** The Stock menu is the nearest thing to a preset list.
+- **The OpenFX build has never run in Resolve, Vegas, Nuke or Natron.** It has run only in a
+  command-line test host, on 8-bit and float pictures at full resolution; 16-bit and RGB-only
+  clips, reduced render scales and unpremultiplied alpha are handled but untried. The Windows
+  build has only been compiled, and the Linux build only loaded.
 
 ---
 

@@ -13,6 +13,13 @@ Colour negative film, and the scan of it, as an FFGL 2.1 effect (`RB01`, shown a
 macOS `.bundle` and a Windows `.dll`. MIT, public at
 `github.com/stoatworks-labs/rebate`.
 
+Since 2026-10-03 it also builds as an **OpenFX plugin** (`com.stoatworks.rebate`,
+shown as `Rebate` in the `Stoatworks` group) for Resolve, Vegas, Nuke and Natron:
+a CPU render that links the same model, controls, frame geometry, font and
+per-frame arithmetic, and carries the one thing written twice — the per-pixel
+passes — in `Render.cpp`, checked against the shaders by `rbtest --cpu`. See
+"The OpenFX build" under what is verified, and its decisions and traps.
+
 Built 2026-09-23 in one session from the fleet's templates and
 `specs/SPEC-rebate.md`: rosette for a subtractive model in densities, plumbicon for
 a photochemical response with a tolerance table, pitch for the harness, the
@@ -89,12 +96,15 @@ The pipeline, in order:
 | `source/Model.{h,cpp}` | The film as numbers: curve constants, base, impurities, crossover, ageing, the five stocks, `Develop()` (stock × process × push → curve), `ScannerProfile()`, the `Perturb` hook bits. `Coverage`/`Dye` in double, for the harness to choose inputs with. |
 | `source/Controls.{h,cpp}` | What a 0..1 slider means, with inverses. Neutral positions land exactly in binary. |
 | `source/Frame.{h,cpp}` | Film geometry in millimetres (gate, perforations, print bands, the centre crop) and the edge-print bitmap. |
+| `source/Render.{h,cpp}` | No GL. `HostValues` (every control as the FFGL host holds it; its member defaults ARE the plugin's defaults, both builds) and `Prepare()` (the per-frame arithmetic: stock, curve, profile, speed and age fog, the leak's spectrum, the grain's film frame), which both builds call; and `Film`/`MeasureLevels`/`Scan`, the CPU mirror of the film, blocks + levels and scan shaders for the OpenFX build. Every mirrored function says `//= mirrored` and names its GLSL; `Shaders.cpp` names this file beside each pass. |
+| `source/ofx/RebateOFX.cpp` | The OpenFX plugin: describe, parameters, marshalling OFX pixels to float and back, `render::Apply` across the host's threads. No per-pixel arithmetic of its own. |
+| `source/ofx/StoatworksAboutOFX.h`, `external/openfx/` | Generated About block for OFX (sync-about.py writes it); the fleet's vendored OFX SDK subset (BSD-3). |
 | `source/Font.{h,cpp}` | graticule's 5x7 font, unchanged. |
 | `source/Shaders.{h,cpp}` | `kModel` (the GLSL library) and the five pass bodies, assembled at run time. |
 | `source/PassBuffer.*` | tinsel's FFGLFBO with the leak fixed. |
 | `source/Rebate.{h,cpp}` | The plugin: parameters, the clock, buffers, the passes. |
 | `source/Diag.{h,cpp}` | A log file, for the shader that will not compile. |
-| `tools/rbtest/` | The offline harness: renders, measures, benchmarks, pipes, dumps shaders. |
+| `tools/rbtest/` | The offline harness: renders, measures, benchmarks, pipes, dumps shaders; `--cpu` compares the OpenFX build's CPU passes with the shaders, `--pipe --engine cpu` runs footage through them, `--bench-cpu` times them. |
 | `tools/sweep.py` | No control is silently dead. |
 | `tools/verify.sh` | All of it, at two rasters, plus the release-time checks done locally. |
 | `demo/` | The browser demo. `plugin.js` holds a copy of every shader piece and of the glyph table, and a PORT of Model, Controls, Frame and the per-frame arithmetic; `vendor/` is the shared kit and is not edited here. |
@@ -105,6 +115,13 @@ coverage, RGBA32F; alpha carries the hole fraction and the picture flag) →
 **blocks** (≤ 64×36 mean channel densities of the picture area; Auto Levels only) →
 **levels** (2×1 ping-pong: least and most dense block, smoothed) → **scan** (grain,
 dyes, mask, transmittance, scanner, mix; straight to the host).
+
+CMake: `rebate_model` (OBJECT, no GL: Model, Controls, Font, Frame, Render) is
+linked by everything; `rebate_core` (OBJECT: the FFGL plugin, shaders, buffers) and
+the `Rebate` bundle and `rbtest` sit behind `REBATE_BUILD_FFGL`; `RebateOFX` behind
+`BUILD_OFX`. `-DREBATE_BUILD_FFGL=OFF` configures with nothing but a compiler, which
+is what the Linux job does. Every final target names `rebate_model` itself: an
+OBJECT library's objects do not travel through a second OBJECT library.
 
 ---
 
@@ -169,6 +186,41 @@ The edge print is read inside `if( in the band )`, and the band is not uniform
 across a pixel quad; implicit derivatives there are undefined, which on another
 driver means garbage mip selection. Caught reading the shader before it ever ran
 wrong here: it reads `textureGrad` with the footprint computed from `MmPerPixel`.
+
+### ☠️ A GPU's bilinear filter is 8-bit fixed point; the CPU's is not
+
+The first `rbtest --cpu` put the OpenFX build 0.1–0.3% of pixels more than half an
+8-bit step from the shaders in every film format, up to 14 steps under Cross, and
+nowhere in Full. All of it sat on the scene's hard edges and in the edge print —
+the two things the film pass reads through `GL_LINEAR`. Rounding the CPU's
+bilinear weights to 8 fractional bits took it to a few pixels in a million;
+truncating them made it worse. So this GPU rounds its weights to 1/256, and a
+float CPU filter is the *better* answer, not the GPU's. The OpenFX build ships
+with exact weights; `render::Uniforms::filterBits` is a test hook that makes the
+CPU filter like a GPU, and `rbtest --cpu` **measures** the GL's filter first (a
+2×1 ramp read at 4096 points: 2^bits + 1 distinct values) rather than assuming 8 —
+Apple's software renderer, which CI has, turned out to round to 12 bits.
+
+### ☠️ c × (1 / 255) is not c / 255
+
+The OFX bundle through the test host differed from `render::Apply` run by the
+harness on the same card — same code, same build — in a handful of pixels, by up
+to 4/255. The harness normalises an 8-bit code by dividing (as GL's normalised
+upload does); the marshalling, copied from macroblock, multiplied by a reciprocal,
+and for some codes that is an ULP away. An ULP is nothing to a colour, but a grain
+site is covered when a 24-bit hash falls under `uint( c × 2^24 )`, so it moves a
+site across its threshold now and then. `gather()` divides; the two are now
+byte-identical at fifteen settings.
+
+### The minified edge print belongs to the driver
+
+Below about 245 rows (35 mm) or 430 (6x6) one output pixel spans more than a glyph
+pixel and `textureGrad` minifies, reading a mip chain `glGenerateMipmap` built from
+a non-power-of-two R8 texture. The GL spec leaves that filter, and the level of
+detail arithmetic, to the implementation, and the CPU's 2×2 box chain differs from
+Apple's by up to 77 steps on single glyph pixels at 180 rows. It is a stand-in,
+and `--cpu` reports those rows rather than bounding them. Above those rasters the
+print is magnified, one bilinear level, and is mirrored.
 
 ### ☠️ Mutation-test only a committed tree
 
@@ -310,6 +362,27 @@ clean before and after.
   plugin's model, not the harness's expectation.
 - **Shaders are assembled at run time** from one model library, and verify.sh
   compiles what `rbtest --dump-shaders` writes, which is the plugin's own strings.
+- **The OpenFX build** (2026-10-03):
+  - **Auto Levels measures every frame on its own.** The FFGL smoothing integrates
+    over frames in host order, and an OFX host renders out of order and
+    concurrently. `MeasureLevels` is the FFGL build's priming measurement and no
+    more; the plugin description says the smoothing is absent. Not faked with
+    temporal clip access: τ = 0.25 s would need some 25 earlier frames' film passes
+    per output frame, for a control that is off by default.
+  - **Grain's film frame from timeline time**, `floor( t / fps × 24 + 1e-6 )`, the
+    FFGL formula with seconds = frames / the clip's frame rate.
+  - **Grain cell × render scale**, so a proxy render point-samples the full render's
+    grain. Everything else is already in film millimetres of the output's height.
+  - **Premultiplied colour is the scene** (transparent is no light), as macroblock's
+    marshalling; the scan is opaque and Mix blends premultiplied.
+  - **The same 0..1 sliders as the FFGL build**, the fleet's convention, with the
+    units in the hints. Script names camelCase (`exposure`, `maskOn`,
+    `grainSeed`…); groups are `<label>Group` (`processGroup`), never the label,
+    because the group "Process" and the choice `process` would otherwise differ by
+    case alone.
+  - **No colour-space option.** The input is display-encoded, as in Resolume. A
+    scene-linear input switch would be a control in one build only; it is an open
+    question instead.
 - **The browser demo** (2026-09-24): the whole CPU half is ported rather than a
   subset, because every number the shaders get comes from it; the integer controls
   are full dropdowns; the page's presets are the user guide's walk and labelled as
@@ -365,6 +438,30 @@ and 333×187 by hand.
   Auto Levels adds the block reduction: 1.85 ms at 4K in a separate run of the dev
   build. Before the mip-chain trap was found the 4K figure was 12.3 ms.
 
+### The OpenFX build, measured 2026-10-03 on the same machine
+
+- **`rbtest --cpu`**, 16 settings, at 320×180, 640×360, 1280×720 and 1920×1080, the
+  CPU filter matched to the measured GL filter: outside the edge print the 99.9th
+  percentile of |GPU − CPU| is ≤ 0.0002 of an 8-bit step and ≤ 39 pixels per
+  million differ by more than half a step (4 at 1080p); the magnified edge print
+  ≤ 0.13 step at the 99.9th percentile; as built (float filter) ≤ 0.1% of pixels.
+  Also passes on Apple's software renderer (12-bit) at 320×180 and 640×360, ≤ 97
+  per million. The control (Portrait 400 against Fine 100) fails at 40%.
+- **Through a host**: ofxhost (resolume-ofx-bridge's ofxprobe with `--in`,
+  `--time`, `--batch`, built in scratch for this port) renders a hard-edged
+  1920×1080 card through the universal bundle **byte-identically** to
+  `rbtest --pipe --engine cpu` at fifteen settings. Against the FFGL plugin through
+  `rbtest --pipe`: Full differs in 12 and 127 pixels of 2,073,600 (five of them by
+  more than 1/255: grain); the film formats in 0.19–0.72%, worst 18/255 at the
+  default grain and 53/255 at Grain Amount 1 — the GPU's filter weights, as the
+  harness's 8-bit-matched CPU render (0.001–0.03%) shows. The control differs at
+  39%. Frame 9 is byte-identical alone, after 0–8 and after out-of-order renders;
+  float and 8-bit renders are byte-identical after rounding.
+- **Cost**: `render::Apply` at 1920×1080, ~29–30 ms on 16 threads, ~250 ms on one;
+  ~40 ms in ofxhost, which uses 8.
+- **The bundle** is universal, exports `OfxGetPlugin`, its plist names its binary,
+  it ad-hoc signs (verify.sh).
+
 ### Assumed, or not done
 
 - ☠️ **Never loaded into Resolume on macOS.** Everything numeric was compiled,
@@ -389,7 +486,12 @@ and 333×187 by hand.
   sweep; at reductions over 2× it would alias. The formats reduce by at most ~1.6×.
 - **E-6 through a manual scan** uses the same Black/White Point controls, which are
   scaled for a negative's density range; Auto Levels suits E-6 better.
-- **No OpenFX port.** Not required for 0.1.0.
+- ☠️ **The OpenFX build has never been in a real OFX host** — not Resolve, Vegas,
+  Nuke or Natron, on any platform. ofxhost renders at scale 1, never tiles, hands
+  over 8-bit or float RGBA, premultiplied; 16-bit, RGB-only and unpremultiplied
+  clips and reduced render scales are handled in the code and unexercised. The
+  Windows build is compiled by CI and has never run; the Linux build is loaded by a
+  Rocky 8 dlopen test in CI and has never rendered.
 - **The browser demo's CPU half is a port that nothing checks** — see below.
 - **`StoatworksAbout.h` and `ATTRIBUTIONS.md` are generated** by stoatworks-backend's
   `sync-about.py` and `sync-attributions.py` from the website's projects.json and the
@@ -417,10 +519,11 @@ print read with `textureGrad`.
 `Develop`, `ScannerProfile`, `Inverts`, `UnwantedSum`, the constants in `Model.h`),
 `Controls.cpp` (every conversion, plus the inverses the constructor's defaults go
 through), `Frame.cpp` (`Compute`, `BuildText`, `drawLabel`, the centre crop) and
-the arithmetic in `Rebate::ProcessOpenGL` (speed and age fog per layer, the edge
-print's exposure, leak weights, the grain frame, the levels' α and when they are
-primed). `std::lround` is ported as half-away-from-zero, not `Math.round`. Change
-any of those files and change `plugin.js` by hand. One spot check was made when it
+the per-frame arithmetic — since 2026-10-03 in `render::Prepare` (speed and age
+fog per layer, the edge print's exposure, leak weights, the grain frame), with the
+levels' α and when they are primed still in `Rebate::ProcessOpenGL`.
+`std::lround` is ported as half-away-from-zero, not `Math.round`. Change any of
+those files and change `plugin.js` by hand. One spot check was made when it
 was built: the unexposed rebate in `View: Negative` reads (175, 108, 74) on the page
 and in `docs/negative.png` from `rbtest` — identical, which exercises the base, the
 mask, the fog, the curve and the sRGB encode together. That is a single sample, not
@@ -468,6 +571,10 @@ with `cf-run npx wrangler deploy` and verify by content either way. Rebate is on
 - **The spec's cyan/yellow wording** — see the decision above.
 - **Neighbouring frames on the strip** are unexposed; showing the previous and next
   frame (the same clip, a frame apart) would look more like a contact strip.
+- **A scene-linear input for the OpenFX build?** Resolve's colour-managed and ACES
+  timelines hand a plugin linear light; Rebate decodes sRGB itself. A Linear/sRGB
+  input choice would serve colourists, but it is a control the FFGL build would not
+  have.
 
 ---
 
