@@ -35,6 +35,16 @@
 /// number over the clip's frame rate, so a frame grains the same way however
 /// and whenever it is rendered.
 ///
+/// **Not every host has a frame rate.** Resolve's Fusion page reports none --
+/// not on the effect, not on any clip -- and the Support library's getters
+/// THROW on a missing property, which out of `render` is a failed render and,
+/// in Fusion, a composition that "could not be processed". `framesPerSecond`
+/// asks the output clip, the source clip and the effect, each read in its own
+/// try, and falls back to 24, Resolve's default timeline rate. Under the
+/// fallback the grain advances one film frame per timeline frame. The only
+/// other host property read here, the clips' premultiplication, is guarded
+/// the same way.
+///
 /// **No audio, no beat sync, no event buttons** -- the FFGL build has none to
 /// drop. The About block is OFX's own: a folded group with real buttons.
 ///
@@ -83,6 +93,8 @@ constexpr const char* kPluginDescription =
 	"previous frame to smooth the scanner's levels against -- the Resolume "
 	"build settles them over a quarter of a second. Grain changes 24 times a "
 	"second of timeline time.\n\n"
+	"Fusion reports no frame rate; there, time-based controls assume 24 fps, "
+	"so the grain changes once per frame.\n\n"
 	"https://stoatworks-labs.com";
 
 // Script names. Permanent: saved projects refer to them.
@@ -110,6 +122,67 @@ constexpr const char* kParamFrameNumber  = "frameNumber";
 constexpr const char* kParamMix          = "mix";
 
 using namespace rebate;
+
+/// The frame rate when the host gives none: Resolve's default timeline rate.
+/// Fusion, inside Resolve, reports no frame rate anywhere.
+constexpr double kFallbackFrameRate = 24.0;
+
+/// The first positive, finite frame rate the host will give -- the output
+/// clip's, the source clip's, the effect's -- each asked in its own try,
+/// because the Support library throws when a host lacks the property and a
+/// throw out of render is a failed render. Otherwise the fallback.
+double framesPerSecond( const OFX::ImageEffect& effect, const OFX::Clip* dst, const OFX::Clip* src )
+{
+	const auto usable = []( double rate ) { return std::isfinite( rate ) && rate > 0.0; };
+	double rate       = 0.0;
+	try
+	{
+		rate = dst != nullptr ? dst->getFrameRate() : 0.0;
+	}
+	catch( ... )
+	{
+		rate = 0.0;
+	}
+	if( usable( rate ) )
+		return rate;
+	try
+	{
+		rate = src != nullptr ? src->getFrameRate() : 0.0;
+	}
+	catch( ... )
+	{
+		rate = 0.0;
+	}
+	if( usable( rate ) )
+		return rate;
+	try
+	{
+		rate = effect.getFrameRate();
+	}
+	catch( ... )
+	{
+		rate = 0.0;
+	}
+	return usable( rate ) ? rate : kFallbackFrameRate;
+}
+
+/// Whether a clip's pixels are premultiplied. An RGB clip has no alpha to be
+/// premultiplied by, and treating it as premultiplied is what makes the round
+/// trip an identity there. A host that will not say is taken to mean
+/// premultiplied, OFX's own default.
+bool isPremultiplied( const OFX::Clip* clip, OFX::PixelComponentEnum components )
+{
+	if( components != OFX::ePixelComponentRGBA || clip == nullptr )
+		return true;
+	try
+	{
+		return clip->getPreMultiplication() != OFX::eImageUnPreMultiplied;
+	}
+	catch( ... )
+	{
+		return true;
+	}
+}
 
 const char* stockName( int index )
 {
@@ -290,13 +363,9 @@ public:
 		if( width <= 0 || height <= 0 )
 			return;
 
-		//OFX time is FRAMES. Seconds come from the clip's frame rate, and a
-		//host that reports zero would otherwise divide by it.
-		double fps = srcClip->getFrameRate();
-		if( !( fps > 0.0 ) )
-			fps = dstClip->getFrameRate();
-		if( !( fps > 0.0 ) )
-			fps = 24.0;
+		//OFX time is FRAMES. Seconds come from the frame rate, which Fusion
+		//does not report at all: see framesPerSecond.
+		const double fps = framesPerSecond( *this, dstClip, srcClip );
 
 		render::Uniforms u = render::Prepare( valuesAt( args.time ), width, height, args.time / fps );
 
@@ -307,12 +376,8 @@ public:
 		if( args.renderScale.x > 0.0 && args.renderScale.x < 1.0 )
 			u.grainCell = static_cast< float >( u.grainCell * args.renderScale.x );
 
-		//An RGB clip has no alpha to be premultiplied by; treating it as
-		//premultiplied is what makes the round trip an identity there.
-		const bool srcPremultiplied =
-			srcComps != OFX::ePixelComponentRGBA || srcClip->getPreMultiplication() != OFX::eImageUnPreMultiplied;
-		const bool premultiplied =
-			comps != OFX::ePixelComponentRGBA || dstClip->getPreMultiplication() != OFX::eImageUnPreMultiplied;
+		const bool srcPremultiplied = isPremultiplied( srcClip, srcComps );
+		const bool premultiplied    = isPremultiplied( dstClip, comps );
 
 		std::vector< float > frame( static_cast< size_t >( width ) * height * 4 );
 		switch( depth )

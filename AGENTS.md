@@ -212,6 +212,20 @@ site is covered when a 24-bit hash falls under `uint( c × 2^24 )`, so it moves 
 site across its threshold now and then. `gather()` divides; the two are now
 byte-identical at fifteen settings.
 
+### ☠️ Fusion has no frame rate, and a missing property is a thrown exception
+
+Found by the lead in a real Resolve Studio 21.1 on the fleet's sibling ports
+(2026-10-03): as a Fusion tool the render job failed, "could not be processed
+successfully". Resolve's Fusion page reports `kOfxImageEffectPropFrameRate` on
+neither the effect nor any clip (and FrameRange as [0, 0]), the Support library's
+`getFrameRate()` throws `PropertyUnknownToHost`, and out of `render` that is
+`kOfxStatErrMissingHostFeature`. Rebate's first OFX build read the source clip's
+rate, then the output's, unguarded, for the grain clock. Every host property the
+plugin reads (the frame rate, the clips' premultiplication) now goes through a
+helper that catches and falls back. It reads no frame range, no Unmapped pair and
+no render-status property. The test host's `--quirks fusion` reproduces it, and
+verify.sh runs it.
+
 ### The minified edge print belongs to the driver
 
 Below about 245 rows (35 mm) or 430 (6x6) one output pixel spans more than a glyph
@@ -371,6 +385,11 @@ clean before and after.
     per output frame, for a control that is off by default.
   - **Grain's film frame from timeline time**, `floor( t / fps × 24 + 1e-6 )`, the
     FFGL formula with seconds = frames / the clip's frame rate.
+  - **Fusion reports no frame rate; there, time-based controls assume 24 fps.**
+    `framesPerSecond` asks the output clip, the source clip and the effect, each in
+    its own try, and falls back to 24, Resolve's default timeline rate. Under the
+    fallback the grain advances one film frame per timeline frame, whatever the
+    composition's real rate. The plugin description says so.
   - **Grain cell × render scale**, so a proxy render point-samples the full render's
     grain. Everything else is already in film millimetres of the output's height.
   - **Premultiplied colour is the scene** (transparent is no light), as macroblock's
@@ -457,6 +476,13 @@ and 333×187 by hand.
   harness's 8-bit-matched CPU render (0.001–0.03%) shows. The control differs at
   39%. Frame 9 is byte-identical alone, after 0–8 and after out-of-order renders;
   float and 8-bit renders are byte-identical after rounding.
+- **Fusion's quirks** (2026-10-04): under the test host's `--quirks fusion` (no
+  FrameRate on the effect or any clip, FrameRange [0, 0], no Unmapped pair, no
+  render-status args) the 66c72b4 build fails with `kOfxStatErrMissingHostFeature`;
+  the guarded build renders, byte-identical to a 24 fps host at frame 50 with Grain
+  Amount 1 and unchanged when the host's unreported rate is 30. Frames 0 and 1 grain
+  differently under the quirk (one film frame per timeline frame) where a 25 fps
+  host grains them alike. Every normal-host result above is unchanged.
 - **Cost**: `render::Apply` at 1920×1080, ~29–30 ms on 16 threads, ~250 ms on one;
   ~40 ms in ofxhost, which uses 8.
 - **The bundle** is universal, exports `OfxGetPlugin`, its plist names its binary,

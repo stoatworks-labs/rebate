@@ -188,6 +188,11 @@ scan is opaque.
   `floor( frame / frame rate × 24 )`, so a frame grains the same way however and in
   whatever order it is rendered. The Resolume build takes seconds from the host's
   clock.
+- **Fusion reports no frame rate; there, time-based controls assume 24 fps.**
+  Resolve's Fusion page gives a plugin no frame rate at all, so Rebate falls back to
+  24, Resolve's default timeline rate, and the grain advances one film frame per
+  timeline frame whatever the composition's real rate. Where a host reports a rate
+  (Resolve's Edit page does), that rate is used.
 - **A reduced render scale** (a proxy or draft render) shrinks the grain cell with
   the picture, so the reduced render point-samples the full render's grain.
 - **Texture filtering is exact float.** A GPU filters with fixed-point weights (the
@@ -266,13 +271,15 @@ On `main`, not yet in a release. Measured on the same machine on 2026-10-03:
 | `rbtest --cpu` | the CPU passes against the real plugin's shaders at 16 settings (every Format, both Views, every Process, both scans, a leak, Mix, and float wedges carrying encoded values up to 4.6), with the CPU's texture filter matched to the one this GPU is **measured** to have (8-bit weights, rounded). Outside the edge print the 99.9th percentile of the difference is at most **0.0002** of an 8-bit step, and at most **39** pixels in a million (4 at 1080p) differ by more than half a step — grain cells flipped by ULP-level differences in exp and log. The edge print, magnified (above about 245 rows), stays under 0.13 of a step at the 99.9th percentile; minified, the GPU reads a mip chain the GL spec leaves to the driver, so it is reported and not bounded. With exact float filtering, as the plugin ships, at most **0.1%** of pixels differ by more than half a step. A control rendering the GPU at Portrait 400 and the CPU at Fine 100 fails at 40% of pixels. Passes at 320×180, 640×360, 1280×720 and 1920×1080 on the M4 Max, and at 320×180 and 640×360 on Apple's software renderer (12-bit weights; at most 97 per million) |
 | the OpenFX bundle in a host | the fleet's CPU OFX test host (ofxprobe, from resolume-ofx-bridge) loads `com.stoatworks.rebate` as Rebate / Stoatworks with every control, group and the About block, and renders. A hard-edged 1920×1080 colour card through the OFX bundle is **byte-identical** to the same card through `rbtest --pipe --engine cpu` (the harness running `render::Apply` itself) at all 15 settings tried, so the OFX marshalling adds nothing |
 | against the Resolume build | the same card through the FFGL plugin (`rbtest --pipe`) and the OFX bundle at 15 settings. In Full, which reads the scene unfiltered, **12** and **127** pixels of 2,073,600 differ (all but five by 1/255; the five are grain). In the film formats **0.19–0.72%** of pixels differ, worst **18/255** (Cross) at the default grain, all on the scene's hard edges and in the edge print; at Grain Amount 1, 0.05–0.10% differ by up to 53/255, where an edge's filtered value moves a grain site across its threshold. That is the GPU's 8-bit filter weights: the CPU render with its weights rounded the same way differs from the FFGL plugin at **0.001–0.03%** of pixels (0.28% under Mix 0.5, by one step). A control (the GPU at Portrait 400, OFX at Fine 100) differs at **39%** of pixels |
+| Fusion's missing frame rate | Resolve's Fusion page reports no frame rate, and the first OpenFX build failed there (found by the real-Resolve check on sibling ports). Under the test host's `--quirks fusion`, which imitates it, the earlier build fails with `kOfxStatErrMissingHostFeature`; this one renders, **byte-identical** to a 24 fps host's render of the same frame and unmoved by the rate the host does not report. `tools/verify.sh` checks it when that host is available |
 | determinism | frame 9 of a changing sequence is byte-identical rendered alone, after frames 0–8 in one instance, and after 9, 3, 11 out of order; at 25 fps frames 0 and 1 share film frame 0 and grain identically, frame 2 does not |
 | float | a float render and an 8-bit render of an 8-bit card are byte-identical after the host's rounding; `rbtest --cpu`'s float wedges carry values above 1 through both builds alike |
 | bundle | universal, exports `OfxGetPlugin`, `CFBundleExecutable` is on disk, ad-hoc signs; CI builds it for Windows x64 and for Linux on AlmaLinux 8, and a stock Rocky 8 container dlopens it and lists its plugin |
 | render cost | **~30 ms** per 1920×1080 frame on 16 threads (best of three runs of 10), **~250 ms** on one; **~40 ms** in the test host, which caps itself at 8 threads |
 
 **Not established:** it has **never been loaded in DaVinci Resolve, Vegas, Nuke or
-Natron**, on any platform; the only host it has met is the command-line test host,
+Natron**, on any platform (Fusion's missing frame rate is imitated by the test
+host, not seen in Resolve itself); the only host it has met is the command-line test host,
 which renders at scale 1, never tiles, and hands over 8-bit or float RGBA. 16-bit
 clips, RGB-only clips, unpremultiplied clips and reduced render scales are handled
 in the code and have not been exercised by any host. The Windows build has only

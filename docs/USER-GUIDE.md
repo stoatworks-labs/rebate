@@ -158,6 +158,11 @@ clip's frame rate, times 24. A frame always grains the same way, however often a
 order the host renders it. At 25 or 30 fps some neighbouring timeline frames share a film frame
 and grain identically, exactly as they would if film at 24 had been transferred.
 
+**Fusion reports no frame rate; there, time-based controls assume 24 fps.** On Resolve's Fusion
+page the plugin is not told the composition's rate, so it takes 24, and the grain changes once
+every frame whatever the real rate. Where the host reports a rate (Resolve's Edit page does), it uses
+that.
+
 ---
 
 ## The Scene group

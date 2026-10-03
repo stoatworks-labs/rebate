@@ -55,6 +55,11 @@
 #                 universal, it ad-hoc signs, and ofxprobe loads it as
 #                 com.stoatworks.rebate and renders a frame that is not its
 #                 input.
+#   fusion        Resolve's Fusion page reports no frame rate anywhere, and the
+#                 OFX Support library THROWS on a missing property: a test host
+#                 with `--quirks fusion` must get a render, and the same frame
+#                 as a 24 fps host. Needs that host (OFXHOST=...); skips
+#                 cleanly without it.
 #
 set -uo pipefail
 
@@ -354,6 +359,55 @@ if [ "$(uname)" = "Darwin" ]; then
 			fi
 			rm -rf "$(dirname "$out")"
 		fi
+
+		#-------------------------------------------------------------------
+		# Resolve's Fusion page reports no kOfxImageEffectPropFrameRate on the
+		# effect or any clip; the Support library's getFrameRate() throws, and
+		# a throw out of render fails the comp. The fleet's extended test host
+		# imitates that with --quirks fusion. It is not in a repo yet: point
+		# OFXHOST at it, or this skips. Under the quirk the grain clock must
+		# fall back to 24 fps: the frame must equal a 24 fps host's, and must
+		# not move when the host's (unreported) rate does.
+		#-------------------------------------------------------------------
+		step "openfx under Fusion's quirks"
+		QUIRKHOST="${OFXHOST:-$OFXPROBE}"
+		help=$("$QUIRKHOST" --help 2>&1)
+		case "$help" in
+			*"--quirks"*)
+				card="$(mktemp -d)"
+				python3 - "$card/in.ppm" <<'PY'
+import sys
+w, h = 320, 180
+px = bytearray()
+for y in range(h):
+    for x in range(w):
+        px += bytes(((x * 255) // w, (y * 255) // h, 255 if (x // 20 + y // 20) % 2 else 40))
+open(sys.argv[1], 'wb').write(b'P6\n%d %d\n255\n' % (w, h) + px)
+PY
+				hashOf() { grep -oE 'fnv1a64 [0-9a-f]+' <<<"$1"; }
+				common=( --no-system-dirs --dir "$BUILD" --render com.stoatworks.rebate --in "$card/in.ppm" --set grainAmount=1 --time 50 )
+				quirk=$("$QUIRKHOST" "${common[@]}" --quirks fusion 2>&1)
+				quirk30=$("$QUIRKHOST" "${common[@]}" --quirks fusion --frame-rate 30 2>&1)
+				at24=$("$QUIRKHOST" "${common[@]}" --frame-rate 24 2>&1)
+				at30=$("$QUIRKHOST" "${common[@]}" --frame-rate 30 2>&1)
+				if [ -z "$(hashOf "$quirk")" ]; then
+					fail "does not render under --quirks fusion"
+					sed 's/^/       /' <<<"$quirk" | tail -5
+				elif [ "$(hashOf "$quirk")" != "$(hashOf "$at24")" ]; then
+					fail "under --quirks fusion the frame differs from a 24 fps host's"
+				elif [ "$(hashOf "$quirk")" != "$(hashOf "$quirk30")" ]; then
+					fail "under --quirks fusion the frame moved with a frame rate the host does not report"
+				elif [ "$(hashOf "$at24")" = "$(hashOf "$at30")" ]; then
+					fail "24 and 30 fps hosts give the same frame -- the check cannot see the clock"
+				else
+					pass "renders with no frame rate, as a 24 fps host would ($(hashOf "$quirk"))"
+				fi
+				rm -rf "$card"
+				;;
+			*)
+				printf '   skipped: no test host with --quirks at %s (set OFXHOST)\n' "$QUIRKHOST"
+				;;
+		esac
 	fi
 fi
 
