@@ -3,7 +3,9 @@ name: ci
 # Both platforms on every push and pull request, so a Dependabot bump has a
 # status check to gate on and a GLEW-shaped break -- which macOS is
 # structurally blind to, because macOS never links GLEW -- is caught before a
-# tag. There is no Linux job: the CMakeLists branches on APPLE and WIN32.
+# tag. Both build the FFGL plugin AND the OpenFX plugin (BUILD_OFX is on by
+# default). The OpenFX plugin's Linux build and its Rocky 8 load test live in
+# release.yml, which a dispatch runs without publishing.
 on:
   push:
     branches: [main]
@@ -61,6 +63,7 @@ jobs:
           ./build/rbtest --seed     --size 320x180
           ./build/rbtest --resize   --size 320x180
           ./build/rbtest --negative --size 320x180
+          ./build/rbtest --cpu      --size 320x180
 
       - name: Controls
         # At 160x90 and two at a time, because the runner has no GPU and the
@@ -69,10 +72,34 @@ jobs:
         timeout-minutes: 25
         run: python3 tools/sweep.py --size 160x90 --jobs 2
 
+      - name: OpenFX bundle
+        # The checks the release job and tools/verify.sh make, on every push:
+        # the plist names the binary that is there (a copied plist passes
+        # everything until codesign at release), the entry point is exported,
+        # and the bundle signs. `--cpu` above is what checks it renders the
+        # same film.
+        #
+        # Captured and matched with `case`, never `nm | grep -q`: under
+        # `bash -eo pipefail` grep exits on its first match, nm takes SIGPIPE,
+        # and the step fails on a correct binary.
+        shell: bash
+        run: |
+          bundle=build/Rebate.ofx.bundle
+          exe=$( /usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$bundle/Contents/Info.plist" )
+          test -f "$bundle/Contents/MacOS/$exe"
+          __symbols=$( nm -gU "$bundle/Contents/MacOS/$exe" )
+          case "$__symbols" in
+            *_OfxGetPlugin*) ;;
+            *) echo "expected _OfxGetPlugin, got: $__symbols"; exit 1 ;;
+          esac
+          codesign --force --sign - --timestamp=none "$bundle"
+
       - uses: actions/upload-artifact@v7
         with:
           name: rebate-macos-arm64
-          path: build/*.bundle
+          path: |
+            build/Rebate.bundle
+            build/Rebate.ofx.bundle
           if-no-files-found: error
 
   windows:
@@ -96,8 +123,18 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --parallel
 
+      - name: OpenFX bundle
+        # The .ofx lands in the bundle's Win64 folder, not build/Release:
+        # CMakeLists pins the Release output directories, and gives the
+        # target its own ARCHIVE directory so its .exp/.lib cannot race the
+        # FFGL target's (LNK1104).
+        shell: bash
+        run: test -f build/Rebate.ofx.bundle/Contents/Win64/Rebate.ofx
+
       - uses: actions/upload-artifact@v7
         with:
           name: rebate-windows-x86_64
-          path: build/Release/*.dll
+          path: |
+            build/Release/*.dll
+            build/Rebate.ofx.bundle/Contents/Win64/Rebate.ofx
           if-no-files-found: error
