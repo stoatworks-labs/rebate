@@ -29,6 +29,11 @@ void main()
 //
 // Layers and channels are both indexed r, g, b: the red-sensitive layer forms
 // cyan dye, which the scanner's red channel reads. See Model.h.
+//
+//= mirrored on the CPU for the OpenFX build: the Model struct in Render.cpp
+//  (softplus, coverage, dyeAmount, channelDensity). EDIT BOTH -- these
+//  comments sit outside the GLSL so the demo's character-for-character copy
+//  is untouched; `rbtest --cpu` renders both and fails when they part.
 //---------------------------------------------------------------------------
 const char* const kModel = R"(
 uniform float Gamma;       //straight-line slope, density per log10 H
@@ -119,6 +124,8 @@ void main()
 // Film coordinates are millimetres: u along the strip from the frame centre,
 // v across it from the top edge. The output is top-down here -- row 0 is the
 // top of the picture -- whatever GL's origin is.
+//
+//= mirrored on the CPU: render::Film in Render.cpp. EDIT BOTH.
 //---------------------------------------------------------------------------
 const char* const kFilmBody = R"(
 uniform sampler2D Picture;   //the scene, sRGB-encoded, bilinear, top at uv.y = 1
@@ -280,6 +287,8 @@ void main()
 
 //---------------------------------------------------------------------------
 // Pass 3: blocks. Mean channel density of the picture area, per block.
+//
+//= mirrored on the CPU: render::MeasureLevels in Render.cpp. EDIT BOTH.
 //---------------------------------------------------------------------------
 const char* const kBlocksBody = R"(
 uniform sampler2D Film;
@@ -315,6 +324,9 @@ void main()
 
 //---------------------------------------------------------------------------
 // Pass 4: levels. Texel 0 is the least dense block, texel 1 the most.
+//
+//= mirrored on the CPU, primed every frame (OpenFX has no previous frame to
+//  smooth against): render::MeasureLevels in Render.cpp. EDIT BOTH.
 //---------------------------------------------------------------------------
 const char* const kLevelsBody = R"(
 uniform sampler2D Blocks;
@@ -362,6 +374,8 @@ void main()
 // cell's draw is a pure function of ( Seed, GrainFrame, cell, layer, site ),
 // and the cell is counted from the TOP-LEFT pixel, so the same seed and frame
 // give the same grain at any raster where the pixels coincide.
+//
+//= mirrored on the CPU: render::Scan in Render.cpp. EDIT BOTH.
 //---------------------------------------------------------------------------
 const char* const kScanBody = R"(
 uniform sampler2D Film;

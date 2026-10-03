@@ -2,6 +2,7 @@
 
 #include "Frame.h"
 #include "PassBuffer.h"
+#include "Render.h"
 #include "StoatworksAboutParams.h"
 
 #include <FFGLSDK.h>
@@ -113,8 +114,8 @@ public:
 	};
 
 	/// The block grid the scanner's auto levels look at, at most.
-	static constexpr int kGridW = 64;
-	static constexpr int kGridH = 36;
+	static constexpr int kGridW = rebate::render::kGridW;
+	static constexpr int kGridH = rebate::render::kGridH;
 
 	/// The scanner's levels settle with this time constant, in seconds: a lab
 	/// scanner sets a roll once, so a per-frame auto exposure that pumped with
@@ -124,6 +125,9 @@ public:
 private:
 	/// The host's clock in seconds, whatever unit it arrived in.
 	double nowSeconds();
+
+	/// What the controls say, in the shape `render::Prepare` takes.
+	rebate::render::HostValues hostValues() const;
 
 	bool uploadText( const rebate::frame::Geometry& geometry, const char* code, int frameNumber, bool on );
 

@@ -42,6 +42,42 @@ endif()
 
 option(REBATE_BUILD_TOOLS "Build the offline render and measurement harness" ON)
 
+# The FFGL plugin, the FFGL SDK submodule and GLEW are one dependency group, and
+# the OpenFX plugin belongs to none of it. Turning this OFF builds the OFX plugin
+# alone, with no GL loader anywhere in the configure -- which is what the Linux
+# job does, because the FFGL SDK has no Linux path and GLEW would otherwise have
+# to be installed to build something that never calls it. The harness needs the
+# FFGL plugin, so it goes with it.
+option(REBATE_BUILD_FFGL "Build the FFGL plugin (needs the FFGL SDK and, off macOS, GLEW)" ON)
+
+# ---------------------------------------------------------------------------
+# The film with no GL in it: the model's numbers, the controls' conversions,
+# the frame geometry and its font, the per-frame arithmetic (render::Prepare)
+# and the CPU mirror of the per-pixel passes (Render.cpp).
+#
+# A separate library from the FFGL core because every build needs it and only
+# one of them has a GL context -- the OpenFX plugin renders on the CPU and the
+# Linux job has no GL loader configured. Splitting it is what lets the OFX build
+# link the SAME stocks, curves and conversions rather than a second
+# transcription of them.
+# ---------------------------------------------------------------------------
+add_library(rebate_model OBJECT
+    source/Model.h
+    source/Model.cpp
+    source/Controls.h
+    source/Controls.cpp
+    source/Font.h
+    source/Font.cpp
+    source/Frame.h
+    source/Frame.cpp
+    source/Render.h
+    source/Render.cpp
+)
+target_include_directories(rebate_model PUBLIC source)
+set_target_properties(rebate_model PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+if(REBATE_BUILD_FFGL)
+
 # ---------------------------------------------------------------------------
 # The Resolume FFGL SDK, as a git submodule pinned to b1afaf9 -- the rev the
 # rest of the fleet pins.
@@ -70,14 +106,6 @@ add_library(rebate_core OBJECT
     source/StoatworksAboutParams.h
     source/Diag.h
     source/Diag.cpp
-    source/Model.h
-    source/Model.cpp
-    source/Controls.h
-    source/Controls.cpp
-    source/Font.h
-    source/Font.cpp
-    source/Frame.h
-    source/Frame.cpp
     source/PassBuffer.h
     source/PassBuffer.cpp
     source/Shaders.h
@@ -87,7 +115,7 @@ add_library(rebate_core OBJECT
 )
 
 target_include_directories(rebate_core PUBLIC source)
-target_link_libraries(rebate_core PUBLIC ffgl::sdk)
+target_link_libraries(rebate_core PUBLIC ffgl::sdk rebate_model)
 target_compile_definitions(rebate_core PUBLIC REBATE_VERSION="${PROJECT_VERSION}")
 set_target_properties(rebate_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
@@ -110,7 +138,12 @@ endif()
 # ---------------------------------------------------------------------------
 function(rebate_add_plugin target entry bundle_name identifier)
     add_library(${target} MODULE ${entry})
-    target_link_libraries(${target} PRIVATE rebate_core)
+    # rebate_model is named again here, and on every other final target,
+    # because an OBJECT library's objects do NOT travel transitively through a
+    # second OBJECT library: rebate_core linking it gives this target the
+    # include paths and nothing to link, and the failure is a pile of undefined
+    # symbols at the very last step of an otherwise clean build.
+    target_link_libraries(${target} PRIVATE rebate_core rebate_model)
 
     if(APPLE)
         set_target_properties(${target} PROPERTIES
@@ -159,8 +192,86 @@ install(TARGETS Rebate
 # ---------------------------------------------------------------------------
 if(REBATE_BUILD_TOOLS AND APPLE)
     add_executable(rbtest tools/rbtest/main.cpp)
-    target_link_libraries(rbtest PRIVATE rebate_core z
+    target_link_libraries(rbtest PRIVATE rebate_core rebate_model z
         "-framework OpenGL"
         "-framework AppKit"
     )
+endif()
+
+endif()  # REBATE_BUILD_FFGL
+
+# ---------------------------------------------------------------------------
+# The OpenFX build, for Resolve/Nuke/Natron/Vegas. CPU render against the
+# vendored OFX SDK subset under external/openfx (C headers + the official C++
+# Support library, BSD-3). rebate_model links straight in, so the stocks, the
+# curve, the scanner's profile, the conversions, the frame geometry, the edge
+# print and the per-frame arithmetic are the same code as the FFGL build; only
+# the per-pixel passes are written twice (Render.cpp, against Shaders.cpp).
+# ---------------------------------------------------------------------------
+option(BUILD_OFX "Build the OpenFX plugin" ON)
+
+if(BUILD_OFX)
+    set(OFX_SDK "${CMAKE_CURRENT_SOURCE_DIR}/external/openfx")
+
+    add_library(RebateOFX MODULE
+        source/ofx/RebateOFX.cpp
+        ${OFX_SDK}/Support/Library/ofxsCore.cpp
+        ${OFX_SDK}/Support/Library/ofxsImageEffect.cpp
+        ${OFX_SDK}/Support/Library/ofxsInteract.cpp
+        ${OFX_SDK}/Support/Library/ofxsLog.cpp
+        ${OFX_SDK}/Support/Library/ofxsMultiThread.cpp
+        ${OFX_SDK}/Support/Library/ofxsParams.cpp
+        ${OFX_SDK}/Support/Library/ofxsProperty.cpp
+        ${OFX_SDK}/Support/Library/ofxsPropertyValidation.cpp
+    )
+    # PRIVATE on an OBJECT library gives both the objects and the usage
+    # requirements. `$<TARGET_OBJECTS:rebate_model>` would give the objects
+    # alone -- no include directories, no compile definitions.
+    target_link_libraries(RebateOFX PRIVATE rebate_model)
+    target_include_directories(RebateOFX PRIVATE
+        source
+        "${OFX_SDK}/include"
+        "${OFX_SDK}/Support/include"
+    )
+    target_compile_definitions(RebateOFX PRIVATE
+        REBATE_VERSION="${PROJECT_VERSION}"
+        PLUGIN_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+        PLUGIN_VERSION_MINOR=${PROJECT_VERSION_MINOR}
+    )
+
+    # Threads, explicitly. The OFX Support library's multi-thread suite calls
+    # pthread_create, and on Rocky 8 -- glibc 2.28, the floor Resolve supports --
+    # that still lives in libpthread; libpthread was only folded into libc in
+    # glibc 2.34. Leave it out and the plugin compiles, links, passes a symbol
+    # check and a glibc-version check, and then fails at dlopen with "undefined
+    # symbol: pthread_create". macOS and Windows never show it.
+    find_package(Threads REQUIRED)
+    target_link_libraries(RebateOFX PRIVATE Threads::Threads)
+
+    set(OFX_BUNDLE_DIR "${CMAKE_BINARY_DIR}/Rebate.ofx.bundle")
+    set_target_properties(RebateOFX PROPERTIES
+        PREFIX ""
+        SUFFIX ".ofx"
+        OUTPUT_NAME "Rebate"
+        LIBRARY_OUTPUT_DIRECTORY "${OFX_BUNDLE_DIR}/Contents/MacOS"
+    )
+    if(APPLE)
+        set(OFX_BUNDLE_IDENTIFIER "com.stoatworks.rebate.ofx")
+        configure_file(cmake/InfoOFX.plist.in
+            "${OFX_BUNDLE_DIR}/Contents/Info.plist" @ONLY)
+    elseif(WIN32)
+        set_target_properties(RebateOFX PROPERTIES
+            LIBRARY_OUTPUT_DIRECTORY "${OFX_BUNDLE_DIR}/Contents/Win64"
+            RUNTIME_OUTPUT_DIRECTORY "${OFX_BUNDLE_DIR}/Contents/Win64"
+            LIBRARY_OUTPUT_DIRECTORY_RELEASE "${OFX_BUNDLE_DIR}/Contents/Win64"
+            RUNTIME_OUTPUT_DIRECTORY_RELEASE "${OFX_BUNDLE_DIR}/Contents/Win64"
+            # MSVC's .exp/.lib for this target; its default directory collides
+            # with the FFGL target's, which shares the output base name, and a
+            # parallel build then races on the file (LNK1104).
+            ARCHIVE_OUTPUT_DIRECTORY "${OFX_BUNDLE_DIR}/importlib"
+            ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${OFX_BUNDLE_DIR}/importlib")
+    else()
+        set_target_properties(RebateOFX PROPERTIES
+            LIBRARY_OUTPUT_DIRECTORY "${OFX_BUNDLE_DIR}/Contents/Linux-x86-64")
+    endif()
 endif()

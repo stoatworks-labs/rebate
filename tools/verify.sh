@@ -35,6 +35,8 @@
 #                   --seed      grain bit-identical for a seed, at any raster
 #                   --resize    the scanner's levels survive a resize
 #                   --negative  every one of those FAILS on a perturbed model
+#                   --cpu       the OpenFX build's CPU copy of the passes
+#                               agrees with the shaders, and a control fails
 #   sweep         does every control change the picture. A GLSL uniform whose
 #                 name does not match the C++ is ignored without a word.
 #   bench         the render cost, for the record. Not pass/fail.
@@ -47,6 +49,12 @@
 #   oxbow         a real FFGL host loads the bundle and reports the name, id
 #                 and type it sees -- the name field is not null-terminated
 #                 and a host truncates silently past 16 characters.
+#   openfx        the OpenFX bundle: CFBundleExecutable names the binary on
+#                 disk (a plist copied from another repo passes everything
+#                 until codesign at release), it exports OfxGetPlugin, it is
+#                 universal, it ad-hoc signs, and ofxprobe loads it as
+#                 com.stoatworks.rebate and renders a frame that is not its
+#                 input.
 #
 set -uo pipefail
 
@@ -137,7 +145,7 @@ fi
 
 for size in 320x180 1280x720; do
 	step "physics at $size"
-	for check in curve push mask grain leak cross rebate seed resize negative; do
+	for check in curve push mask grain leak cross rebate seed resize negative cpu; do
 		if out=$("$RBTEST" --$check --size $size 2>&1); then
 			pass "rbtest --$check: $( printf '%s\n' "$out" | grep -v '^$' | tail -1 )"
 		else
@@ -196,6 +204,8 @@ fi
 
 step "bench (for the record)"
 "$RBTEST" --bench --frames 60 2>&1 | sed -n '3,7p' | sed 's/^/   /'
+printf '   OpenFX (CPU):\n'
+"$RBTEST" --bench-cpu --size 1920x1080 --frames 10 2>&1 | sed -n '2,3p' | sed 's/^/   /'
 
 BUNDLE="$BUILD/Rebate.bundle"
 BIN="$BUNDLE/Contents/MacOS/Rebate"
@@ -258,6 +268,92 @@ if [ "$(uname)" = "Darwin" ] && [ -d "$BUNDLE" ]; then
 		esac
 	else
 		printf '   skipped: oxbow not built at %s\n' "$OXBOW"
+	fi
+fi
+
+#---------------------------------------------------------------------------
+# The OpenFX bundle.
+#
+# cmake/InfoOFX.plist.in is copied from repo to repo, and a copy with the
+# previous plugin's name in CFBundleExecutable does not fail the build: the
+# bundle assembles, lipo and nm pass, ofxprobe loads it and renders a correct
+# frame. It fails at RELEASE time, in codesign, with a message that never
+# mentions the plist. So: the plist against the binary on disk, and the exact
+# codesign the release job runs, against a copy.
+#
+# ofxprobe scans /Library/OFX/Plugins as well as --dir, and the first bundle
+# declaring an identifier wins -- an installed Rebate there would be what got
+# probed. Checked rather than assumed.
+#---------------------------------------------------------------------------
+OFX_BUNDLE="$BUILD/Rebate.ofx.bundle"
+OFX_BIN="$OFX_BUNDLE/Contents/MacOS/Rebate.ofx"
+if [ "$(uname)" = "Darwin" ]; then
+	step "openfx"
+	if [ ! -d "$OFX_BUNDLE" ]; then
+		fail "no OpenFX bundle at $OFX_BUNDLE (built with -DBUILD_OFX=OFF?)"
+	else
+		exe=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$OFX_BUNDLE/Contents/Info.plist" 2>/dev/null)
+		ident=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$OFX_BUNDLE/Contents/Info.plist" 2>/dev/null)
+		if [ -n "$exe" ] && [ -f "$OFX_BUNDLE/Contents/MacOS/$exe" ]; then
+			pass "CFBundleExecutable ($exe) is on disk"
+		else
+			fail "CFBundleExecutable is '$exe' but no such binary exists -- codesign will fail after the tag"
+		fi
+		if [ "$ident" = "com.stoatworks.rebate.ofx" ]; then
+			pass "CFBundleIdentifier is $ident"
+		else
+			fail "CFBundleIdentifier is '$ident'"
+		fi
+
+		syms=$(nm -gU "$OFX_BIN" 2>/dev/null)
+		case "$syms" in
+			*_OfxGetPlugin*) pass "exports OfxGetPlugin" ;;
+			*) fail "no OfxGetPlugin -- no host will see a plugin" ;;
+		esac
+
+		archs=$(lipo -archs "$OFX_BIN" 2>/dev/null)
+		case "$archs" in *arm64*) pass "arm64 present" ;; *) fail "no arm64 (got: $archs)" ;; esac
+		case "$archs" in *x86_64*) pass "x86_64 present" ;; *) fail "no x86_64 (got: $archs)" ;; esac
+
+		tmp=$(mktemp -d)
+		cp -R "$OFX_BUNDLE" "$tmp/" 2>/dev/null
+		if codesign --force --sign - --timestamp=none "$tmp/Rebate.ofx.bundle" >/dev/null 2>&1; then
+			pass "ad-hoc signs (the command the release job runs)"
+		else
+			fail "ad-hoc signing the OpenFX bundle failed"
+		fi
+		rm -rf "$tmp"
+
+		OFXPROBE="${OFXPROBE:-../resolume-ofx-bridge/build/ofxprobe}"
+		[ -x "$OFXPROBE" ] || OFXPROBE="$HOME/Projects/resolume/resolume-ofx-bridge/build/ofxprobe"
+		if [ ! -x "$OFXPROBE" ]; then
+			printf '   skipped: ofxprobe not built at %s\n' "$OFXPROBE"
+		else
+			installed=$(grep -rl "com.stoatworks.rebate" /Library/OFX/Plugins 2>/dev/null)
+			if [ -n "$installed" ]; then
+				fail "an installed bundle in /Library/OFX/Plugins declares com.stoatworks.rebate; ofxprobe may load it instead: $installed"
+			fi
+			manifest=$("$OFXPROBE" --dir "$BUILD" --manifest com.stoatworks.rebate 2>&1)
+			case "$manifest" in
+				*"\"label\": \"Rebate\""*"\"grouping\": \"Stoatworks\""*) pass "ofxprobe loads com.stoatworks.rebate as Rebate, in Stoatworks" ;;
+				*) fail "ofxprobe does not describe com.stoatworks.rebate as Rebate / Stoatworks -- see: $OFXPROBE --dir $BUILD --manifest com.stoatworks.rebate" ;;
+			esac
+			case "$manifest" in
+				*"\"bundlePath\": \"$PWD/$OFX_BUNDLE\""*|*"\"bundlePath\": \"$OFX_BUNDLE\""*) pass "the bundle ofxprobe loaded is this build's" ;;
+				*) fail "ofxprobe loaded com.stoatworks.rebate from somewhere other than $OFX_BUNDLE" ;;
+			esac
+			out="$(mktemp -d)/ofx.bmp"
+			result=$("$OFXPROBE" --dir "$BUILD" --render com.stoatworks.rebate --size 640x360 --out "$out" 2>&1)
+			if ! grep -q "rendered" <<<"$result"; then
+				fail "the OpenFX bundle does not render"
+				sed 's/^/       /' <<<"$result"
+			elif grep -qE "^ *0 of [0-9]+ bytes differ" <<<"$result"; then
+				fail "the OpenFX bundle renders its input unchanged"
+			else
+				pass "renders ($(grep -oE '[0-9]+ of [0-9]+ bytes differ' <<<"$result") from the input)"
+			fi
+			rm -rf "$(dirname "$out")"
+		fi
 	fi
 fi
 

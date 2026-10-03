@@ -54,6 +54,7 @@
 #include "Frame.h"
 #include "Model.h"
 #include "Rebate.h"
+#include "Render.h"
 #include "Shaders.h"
 
 #include <OpenGL/OpenGL.h>
@@ -70,6 +71,8 @@
 #include <sstream>
 #include <string>
 #include <csignal>
+#include <functional>
+#include <thread>
 #include <unistd.h>
 #include <utility>
 #include <vector>
@@ -1697,6 +1700,516 @@ int runResize( int width, int height, int perturb = 0, bool quiet = false )
 	return failures;
 }
 
+
+//---------------------------------------------------------------------------
+// --cpu
+//
+// The OpenFX build renders on the CPU, through render::Film, MeasureLevels and
+// Scan in Render.cpp: a line-for-line copy of the film, blocks + levels and
+// scan shaders, in float. Two copies drift, so this renders the test card
+// through BOTH -- the real plugin class in GL, and render::Apply over the
+// same float input, the same parameters read back out of a plugin instance,
+// the same clock -- and compares the float outputs pixel for pixel.
+//
+// One frame per instance, so Auto Levels is on its priming frame: the only
+// frame on which the FFGL build's levels are the measurement alone, which is
+// all the OpenFX build has. The cases between them move every control group,
+// every Format, both Views, every Process and both scans.
+//
+// The CPU cannot be the GPU bit for bit, and the comparison is split where
+// the reasons differ:
+//
+//   mirror     the CPU with render::Uniforms::filterBits set to what this
+//              GL's bilinear filter is MEASURED to do (measureFilterBits: 8
+//              fractional bits, rounded, on the Apple GPUs this was written
+//              on). Over the picture -- every row the
+//              edge print cannot reach -- the 99.9th percentile of |GPU - CPU|
+//              must be under half an 8-bit step, and at most 250 pixels in a
+//              million may be louder. What is left is GRAIN: a site is covered
+//              when a 24-bit hash falls under uint( c x 2^24 ), so a c a few
+//              ULP apart (exp, log, pow are a few ULP apart between libm and a
+//              GPU) flips a site now and then, and a flip moves a whole cell.
+//              Measured on an M4 Max: at most 39 per million at 320x180,
+//              falling to 4 at 1920x1080; at most 97 on Apple's software
+//              renderer (12-bit weights, coarser transcendentals) at 320x180
+//              and 640x360 -- at 320x180 one flipped 2 x 2 cell is 77.
+//   as built   the CPU exactly as the OpenFX build renders: float weights.
+//              The scene's hard edges in the film formats then differ by the
+//              GPU's filter error, steepest under Cross and E-6. Bounded
+//              loosely, at 2500 per million (measured: at most 965, at
+//              320x180, where edges are the largest fraction of the frame;
+//              141 at 1920x1080).
+//   print      the edge print's rows. Magnified (above about 245 rows on
+//              35 mm, 430 on 6x6) it is one bilinear level and is bounded like
+//              the picture's mirror, at 5000 per million of its own rows
+//              (measured: at most 1034). MINIFIED, the GPU reads a mip chain
+//              glGenerateMipmap built from a non-power-of-two R8 texture, with
+//              a filter and level-of-detail arithmetic the GL spec leaves to
+//              the implementation: the CPU's box-filtered chain is a stand-in,
+//              not a mirror, so it is reported and not bounded.
+//
+// The control renders the GPU at Portrait 400 and the CPU at Fine 100: the
+// same model with one control moved. It must fail the loosest bound, or the
+// check cannot see a real difference.
+//---------------------------------------------------------------------------
+constexpr double kMirrorPerMillion = 250.0;
+constexpr double kExactPerMillion  = 2500.0;
+constexpr double kPrintPerMillion  = 5000.0;
+
+render::HostValues hostValuesOf( Rebate& p )
+{
+	render::HostValues v;
+	v.exposure     = p.GetFloatParameter( Rebate::PT_EXPOSURE );
+	v.stock        = p.GetFloatParameter( Rebate::PT_STOCK );
+	v.push         = p.GetFloatParameter( Rebate::PT_PUSH );
+	v.age          = p.GetFloatParameter( Rebate::PT_AGE );
+	v.process      = p.GetFloatParameter( Rebate::PT_PROCESS );
+	v.maskOn       = p.GetFloatParameter( Rebate::PT_MASK );
+	v.grainAmount  = p.GetFloatParameter( Rebate::PT_GRAIN_AMOUNT );
+	v.grainSize    = p.GetFloatParameter( Rebate::PT_GRAIN_SIZE );
+	v.grainSeed    = p.GetFloatParameter( Rebate::PT_GRAIN_SEED );
+	v.leakAmount   = p.GetFloatParameter( Rebate::PT_LEAK_AMOUNT );
+	v.leakEdge     = p.GetFloatParameter( Rebate::PT_LEAK_EDGE );
+	v.leakWarmth   = p.GetFloatParameter( Rebate::PT_LEAK_WARMTH );
+	v.leakSpread   = p.GetFloatParameter( Rebate::PT_LEAK_SPREAD );
+	v.view         = p.GetFloatParameter( Rebate::PT_VIEW );
+	v.autoLevels   = p.GetFloatParameter( Rebate::PT_AUTO_LEVELS );
+	v.blackPoint   = p.GetFloatParameter( Rebate::PT_BLACK_POINT );
+	v.whitePoint   = p.GetFloatParameter( Rebate::PT_WHITE_POINT );
+	v.scannerGamma = p.GetFloatParameter( Rebate::PT_SCANNER_GAMMA );
+	v.format       = p.GetFloatParameter( Rebate::PT_FORMAT );
+	v.edgeText     = p.GetFloatParameter( Rebate::PT_EDGE_TEXT );
+	v.frameNumber  = p.GetFloatParameter( Rebate::PT_FRAME_NUMBER );
+	v.mix          = p.GetFloatParameter( Rebate::PT_MIX );
+	return v;
+}
+
+/// render::Parallel over std::thread, one band of rows per hardware thread.
+void threadedRows( int rows, const std::function< void( int, int ) >& body )
+{
+	const int workers = static_cast< int >( std::max( 1u, std::thread::hardware_concurrency() ) );
+	std::vector< std::thread > pool;
+	for( int i = 0; i < workers; ++i )
+	{
+		const int y0 = rows * i / workers, y1 = rows * ( i + 1 ) / workers;
+		if( y1 > y0 )
+			pool.emplace_back( [ &body, y0, y1 ] { body( y0, y1 ); } );
+	}
+	for( std::thread& t : pool )
+		t.join();
+}
+
+/// The 8-bit card as the GPU sees it after upload into an RGBA32F texture:
+/// c / 255, in float, rows bottom-up.
+std::vector< float > cardAsFloatBottomUp( const std::vector< unsigned char >& card, int width, int height )
+{
+	std::vector< float > image( card.size() );
+	for( size_t i = 0; i < card.size(); ++i )
+		image[ i ] = static_cast< float >( card[ i ] ) / 255.0f;
+	return flipRows( image, width, height );
+}
+
+constexpr double kCpuFps = 24.0;
+
+/// What a --cpu case renders: the 8-bit test card, as a host hands over a
+/// clip, or a FLOAT wedge from 3 log units under mid grey to 1.2 over it --
+/// encoded values up to 4.6, which only a float pipeline carries -- side by
+/// side with the card's colours, so nothing above 1 is quantised or clipped
+/// on its way to the film.
+std::vector< float > floatSource( int width, int height, int frame, bool hdr )
+{
+	if( !hdr )
+		return flipRows( cardAsFloatBottomUp( buildCard( width, height, frame ), width, height ), width, height );
+	std::vector< float > wedge = buildWedge( width, height, logRamp( model::MidGreyLog() - 3.0, model::MidGreyLog() + 1.2, 24 ) );
+	const std::vector< unsigned char > card = buildCard( width, height, frame );
+	for( int y = height / 2; y < height; ++y )//the card's lower half: patches and greys
+		for( int x = 0; x < width; ++x )
+			for( int c = 0; c < 4; ++c )
+			{
+				const size_t i = ( static_cast< size_t >( y ) * width + x ) * 4 + static_cast< size_t >( c );
+				wedge[ i ]     = static_cast< float >( card[ i ] ) / 255.0f;
+			}
+	return wedge;
+}
+
+/// One frame through the GPU plugin, top-down floats.
+bool renderGpu( int width, int height, const Settings& settings, int frame, std::vector< float >& out, bool hdr = false )
+{
+	Session session;
+	session.fps = kCpuFps;
+	for( const auto& s : settings )
+		if( !set( session.plugin, s.first, s.second ) )
+			return false;
+	if( !session.begin( width, height ) )
+		return false;
+	const bool ok = hdr ? session.render( frame, floatSource( width, height, frame, true ) )
+	                    : session.render( frame, buildCard( width, height, frame ) );
+	out           = session.readBackFloat();
+	session.end();
+	return ok;
+}
+
+/// The same frame through render::Apply: the parameters read back out of a
+/// plugin instance given the same settings, the same clock, the same float
+/// input. Top-down floats.
+bool uniformsFor( int width, int height, const Settings& settings, int frame, render::Uniforms& u )
+{
+	Rebate plugin;
+	for( const auto& s : settings )
+		if( !set( plugin, s.first, s.second ) )
+			return false;
+	u = render::Prepare( hostValuesOf( plugin ), width, height, static_cast< double >( frame ) / kCpuFps );
+	return true;
+}
+
+bool renderCpu( int width, int height, const Settings& settings, int frame, int filterBits, std::vector< float >& out,
+                bool hdr = false )
+{
+	render::Uniforms u;
+	if( !uniformsFor( width, height, settings, frame, u ) )
+		return false;
+	u.filterBits = filterBits;
+	std::vector< float > image = flipRows( floatSource( width, height, frame, hdr ), width, height );
+	render::Apply( u, image.data(), image.data(), threadedRows );
+	out = flipRows( image, width, height );
+	return true;
+}
+
+struct Agreement
+{
+	double median = 0.0;///< of |GPU - CPU| over every channel, in 8-bit steps
+	double p999   = 0.0;///< 99.9th percentile, in 8-bit steps
+	double worst  = 0.0;///< in 8-bit steps
+	size_t loud   = 0;  ///< pixels with any channel more than half a step apart
+	size_t pixels = 0;
+	size_t codes  = 0;  ///< pixels whose 8-bit encodings differ in any channel
+	int worstCode = 0;  ///< the largest such difference, in codes
+};
+
+/// `rows` (top-down) selects which rows are compared; empty is all of them.
+Agreement compare( const std::vector< float >& a, const std::vector< float >& b, int width,
+                   const std::vector< bool >& rows = {} )
+{
+	Agreement r;
+	std::vector< float > errors;
+	errors.reserve( a.size() );
+	for( size_t p = 0; p < a.size() / 4; ++p )
+	{
+		if( !rows.empty() && !rows[ p / static_cast< size_t >( width ) ] )
+			continue;
+		++r.pixels;
+		bool loud = false, coded = false;
+		for( int c = 0; c < 4; ++c )
+		{
+			const size_t i = p * 4 + static_cast< size_t >( c );
+			const double e = std::fabs( static_cast< double >( a[ i ] ) - static_cast< double >( b[ i ] ) ) * 255.0;
+			errors.push_back( static_cast< float >( e ) );
+			r.worst        = std::max( r.worst, e );
+			loud           = loud || e > 0.5;
+			const int ca   = static_cast< int >( std::lround( std::clamp( a[ i ], 0.0f, 1.0f ) * 255.0f ) );
+			const int cb   = static_cast< int >( std::lround( std::clamp( b[ i ], 0.0f, 1.0f ) * 255.0f ) );
+			coded          = coded || ca != cb;
+			r.worstCode    = std::max( r.worstCode, std::abs( ca - cb ) );
+		}
+		r.loud += loud ? 1 : 0;
+		r.codes += coded ? 1 : 0;
+	}
+	if( errors.empty() )
+		return r;
+	std::sort( errors.begin(), errors.end() );
+	r.median = errors[ errors.size() / 2 ];
+	r.p999   = errors[ std::min( errors.size() - 1, errors.size() * 999 / 1000 ) ];
+	return r;
+}
+
+/// The rows (top-down) the edge print can touch, a pixel either side; empty
+/// when there is none. `minified` says whether the GPU samples it from a mip
+/// chain there -- below about 245 rows on 35 mm and 430 on 6x6, where one
+/// output pixel spans more than one glyph pixel.
+std::vector< bool > printRows( const render::Uniforms& u, bool& minified )
+{
+	std::vector< bool > rows;
+	const frame::Geometry& g = u.geometry;
+	minified                 = g.mmPerPixel * frame::kGlyphRowsPerMm > 1.0;
+	if( g.format == frame::kFull || !u.edgeText )
+		return rows;
+	rows.assign( static_cast< size_t >( u.height ), false );
+	for( const double* band : { g.bandA, g.bandB } )
+	{
+		if( band[ 1 ] <= band[ 0 ] )
+			continue;
+		const int top    = std::max( 0, static_cast< int >( std::floor( band[ 0 ] / g.mmPerPixel ) ) - 1 );
+		const int bottom = std::min( u.height - 1, static_cast< int >( std::ceil( band[ 1 ] / g.mmPerPixel ) ) + 1 );
+		for( int y = top; y <= bottom; ++y )
+			rows[ static_cast< size_t >( y ) ] = true;
+	}
+	return rows;
+}
+
+std::vector< bool > invert( const std::vector< bool >& rows )
+{
+	std::vector< bool > out( rows.size() );
+	for( size_t i = 0; i < rows.size(); ++i )
+		out[ i ] = !rows[ i ];
+	return out;
+}
+
+/// Half an 8-bit step at the 99.9th percentile, and at most `perMillion`
+/// pixels in a million louder than that.
+bool agrees( const Agreement& r, double perMillion )
+{
+	return r.median < 0.5 && r.p999 < 0.5 && static_cast< double >( r.loud ) * 1e6 <= perMillion * static_cast< double >( r.pixels );
+}
+
+void report( const char* label, const Agreement& r, bool ok, bool bounded = true )
+{
+	std::printf( "  %-9s median %.4f  p99.9 %.4f  worst %6.2f steps; %5zu of %zu pixels > 0.5 step (%.4f%%); 8-bit codes: %5zu differ, worst %2d  %s\n",
+	             label, r.median, r.p999, r.worst, r.loud, r.pixels, 100.0 * static_cast< double >( r.loud ) / static_cast< double >( r.pixels ),
+	             r.codes, r.worstCode, bounded ? verdict( ok ) : "(reported)" );
+}
+
+/// The GPU's bilinear filter, measured rather than assumed: a 2 x 1 float
+/// texture holding 0 and 1, read with GL_LINEAR at 4096 evenly spaced points
+/// between the two texel centres. A fixed-point filter returns 2^bits + 1
+/// distinct values; a float one returns about 4096. Then one read two thirds
+/// of a weight step past the first texel says how a weight is quantised: a
+/// rounding filter reads one step there, a truncating one reads 0.
+///
+/// Returns render::Uniforms::filterBits: bits for a rounding filter, minus
+/// bits for a truncating one, 0 for float weights (or if it cannot tell).
+int measureFilterBits( std::string& description )
+{
+	const char* vertex   = "#version 410 core\n"
+	                       "void main() {\n"
+	                       "  vec2 p = vec2( ( gl_VertexID & 1 ) * 4.0 - 1.0, ( gl_VertexID & 2 ) * 2.0 - 1.0 );\n"
+	                       "  gl_Position = vec4( p, 0.0, 1.0 );\n"
+	                       "}\n";
+	const char* fragment = "#version 410 core\n"
+	                       "uniform sampler2D T;\n"
+	                       "uniform float Offset;\n"
+	                       "uniform float Count;\n"
+	                       "out vec4 colour;\n"
+	                       "void main() {\n"
+	                       "  float f = Offset >= 0.0 ? Offset : ( gl_FragCoord.x - 0.5 ) / Count;\n"
+	                       "  colour = vec4( texture( T, vec2( 0.25 + 0.5 * f, 0.5 ) ).r );\n"
+	                       "}\n";
+	auto compile = []( GLenum type, const char* source ) {
+		const GLuint shader = glCreateShader( type );
+		glShaderSource( shader, 1, &source, nullptr );
+		glCompileShader( shader );
+		GLint ok = 0;
+		glGetShaderiv( shader, GL_COMPILE_STATUS, &ok );
+		return ok ? shader : 0u;
+	};
+	const GLuint vs = compile( GL_VERTEX_SHADER, vertex ), fs = compile( GL_FRAGMENT_SHADER, fragment );
+	if( vs == 0 || fs == 0 )
+	{
+		description = "the probe shader did not compile";
+		return 0;
+	}
+	const GLuint program = glCreateProgram();
+	glAttachShader( program, vs );
+	glAttachShader( program, fs );
+	glLinkProgram( program );
+
+	const float texels[ 8 ] = { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f };
+	const GLuint texture    = makeTexture( 2, 1, GL_RGBA32F, GL_FLOAT, texels );
+	constexpr int kCount    = 4097;
+	const GLuint target     = makeTexture( kCount, 1, GL_RGBA32F, GL_FLOAT, nullptr );
+	const GLuint fbo        = makeFramebuffer( target );
+	GLuint vao              = 0;
+	glGenVertexArrays( 1, &vao );
+
+	auto run = [ & ]( float offset, std::vector< float >& out ) {
+		glBindFramebuffer( GL_FRAMEBUFFER, fbo );
+		glViewport( 0, 0, kCount, 1 );
+		glUseProgram( program );
+		glActiveTexture( GL_TEXTURE0 );
+		glBindTexture( GL_TEXTURE_2D, texture );
+		glUniform1i( glGetUniformLocation( program, "T" ), 0 );
+		glUniform1f( glGetUniformLocation( program, "Offset" ), offset );
+		glUniform1f( glGetUniformLocation( program, "Count" ), static_cast< float >( kCount - 1 ) );
+		glBindVertexArray( vao );
+		glDrawArrays( GL_TRIANGLE_STRIP, 0, 4 );
+		out.assign( static_cast< size_t >( kCount ) * 4, 0.0f );
+		glReadPixels( 0, 0, kCount, 1, GL_RGBA, GL_FLOAT, out.data() );
+	};
+
+	std::vector< float > ramp;
+	run( -1.0f, ramp );
+	std::vector< float > values;
+	for( int i = 0; i < kCount; ++i )
+		values.push_back( ramp[ static_cast< size_t >( i ) * 4 ] );
+	std::sort( values.begin(), values.end() );
+	const size_t distinct = static_cast< size_t >( std::unique( values.begin(), values.end() ) - values.begin() );
+
+	int bits = 0;
+	for( int b = 1; b <= 12; ++b )
+		if( distinct == ( static_cast< size_t >( 1 ) << b ) + 1 )
+			bits = b;
+
+	int result = 0;
+	if( bits > 0 )
+	{
+		std::vector< float > one;
+		run( ( 2.0f / 3.0f ) / static_cast< float >( 1 << bits ), one );
+		const bool rounds = one[ 0 ] > 0.0f;
+		result            = rounds ? bits : -bits;
+		description       = std::to_string( bits ) + "-bit fixed-point weights, " + ( rounds ? "rounded" : "truncated" );
+	}
+	else
+		description = distinct > 2048 ? "float weights (" + std::to_string( distinct ) + " distinct values in 4097)"
+		                               : "an unrecognised filter (" + std::to_string( distinct ) + " distinct values in 4097) -- compared as float";
+
+	glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+	glUseProgram( 0 );
+	glBindVertexArray( 0 );
+	glDeleteVertexArrays( 1, &vao );
+	glDeleteFramebuffers( 1, &fbo );
+	glDeleteTextures( 1, &target );
+	glDeleteTextures( 1, &texture );
+	glDeleteProgram( program );
+	glDeleteShader( vs );
+	glDeleteShader( fs );
+	return result;
+}
+
+int runCpu( int width, int height, bool quiet = false )
+{
+	struct Case
+	{
+		const char* name;
+		Settings settings;
+		bool hdr = false;
+	};
+	const Case cases[] = {
+		{ "defaults (35 mm, grain)", {} },
+		{ "Format Full", { { "Format", 0.0f } } },
+		{ "Format 6x6", { { "Format", 1.0f } } },
+		{ "Auto Levels", { { "Auto Levels", 1.0f } } },
+		{ "View Negative", { { "View", 1.0f } } },
+		{ "Leak top, warm, Full", { { "Leak Amount", 0.6f }, { "Leak Edge", 2.0f }, { "Format", 0.0f } } },
+		{ "Cross", { { "Process", 2.0f } } },
+		{ "Expired 400, Age 0.5", { { "Stock", 4.0f }, { "Age", 0.5f } } },
+		{ "Push +1, Exposure -1.2", { { "Push", 0.5f }, { "Exposure", 0.4f } } },
+		{ "Slide 100 in E-6, Auto Levels", { { "Process", 1.0f }, { "Stock", 3.0f }, { "Auto Levels", 1.0f } } },
+		{ "Mask Off, Scanner Gamma 1.41", { { "Mask On", 0.0f }, { "Scanner Gamma", 0.75f } } },
+		{ "Grain 800, Amount 1, 3 px", { { "Stock", 2.0f }, { "Grain Amount", 1.0f }, { "Grain Size", 0.528f } } },
+		{ "Mix 0.5, Leak left", { { "Mix", 0.5f }, { "Leak Amount", 0.45f }, { "Leak Edge", 0.0f } } },
+		{ "Black 0.2, White 2.0, frame 37", { { "Black Point", 0.3333f }, { "White Point", 0.5833f }, { "Frame Number", 37.0f } } },
+		{ "float wedge to 4.6, Full", { { "Format", 0.0f }, { "White Point", 0.75f } }, true },
+		{ "float wedge to 4.6, 35 mm, Mix 0.5", { { "Mix", 0.5f } }, true },
+	};
+	constexpr int kFrame = 7;
+
+	//The GPU's filter, so the mirror can filter the same way. Measured here,
+	//not assumed: the Apple GPUs this was written on round to 8 bits, and a
+	//software renderer (CI's) need not.
+	std::string filter;
+	const int filterBits = measureFilterBits( filter );
+	if( !quiet )
+	{
+		const GLubyte* renderer = glGetString( GL_RENDERER );
+		std::printf( "cpu: this GL (%s) filters with %s\n", renderer ? reinterpret_cast< const char* >( renderer ) : "unknown",
+		             filter.c_str() );
+	}
+
+	int failures = 0;
+	for( const Case& c : cases )
+	{
+		std::vector< float > gpu, mirrored, exact;
+		if( !renderGpu( width, height, c.settings, kFrame, gpu, c.hdr )
+		    || !renderCpu( width, height, c.settings, kFrame, filterBits, mirrored, c.hdr )
+		    || !renderCpu( width, height, c.settings, kFrame, 0, exact, c.hdr ) )
+			return 1;
+		render::Uniforms u;
+		uniformsFor( width, height, c.settings, kFrame, u );
+		bool minified                     = false;
+		const std::vector< bool > print   = printRows( u, minified );
+		const std::vector< bool > picture = print.empty() ? print : invert( print );
+		const Agreement m = compare( gpu, mirrored, width, picture );
+		const Agreement e = compare( gpu, exact, width, picture );
+		const bool mOk    = agrees( m, kMirrorPerMillion );
+		const bool eOk    = agrees( e, kExactPerMillion );
+		if( !quiet )
+		{
+			std::printf( "cpu %s\n", c.name );
+			report( "mirror", m, mOk );
+			report( "as built", e, eOk );
+		}
+		if( !print.empty() )
+		{
+			const Agreement b = compare( gpu, mirrored, width, print );
+			const bool bOk    = minified || agrees( b, kPrintPerMillion );
+			if( !quiet )
+			{
+				std::printf( "  print     %zu rows, %s\n", b.pixels / static_cast< size_t >( width ),
+				             minified ? "MINIFIED: a mip chain the GL spec leaves to the driver, reported and not bounded"
+				                      : "magnified: one bilinear level, mirrored" );
+				report( "mirror", b, bOk, !minified );
+			}
+			failures += !bOk;
+		}
+		failures += !mOk + !eOk;
+	}
+
+	//The control: a real difference must fail.
+	{
+		std::vector< float > gpu, cpu;
+		if( !renderGpu( width, height, {}, kFrame, gpu ) || !renderCpu( width, height, { { "Stock", 0.0f } }, kFrame, filterBits, cpu ) )
+			return 1;
+		const Agreement r = compare( gpu, cpu, width );
+		const bool caught = !agrees( r, kPrintPerMillion );
+		if( !quiet )
+		{
+			std::printf( "cpu control: GPU at Portrait 400, CPU at Fine 100\n" );
+			report( "control", r, !caught );
+			std::printf( "  %s\n", caught ? "it failed, as it must" : "it PASSED -- the check cannot see a real difference" );
+		}
+		if( !caught )
+			++failures;
+	}
+
+	if( !quiet )
+		std::printf( "%s\n", failures == 0 ? "cpu: the OpenFX build's CPU passes agree with the shaders" : "cpu: FAILURES" );
+	return failures;
+}
+
+//---------------------------------------------------------------------------
+// --bench-cpu: the OpenFX build's render, without a host.
+//---------------------------------------------------------------------------
+int runBenchCpu( int width, int height, int frames )
+{
+	const std::vector< unsigned char > card = buildCard( width, height, 0 );
+	const std::vector< float > input        = cardAsFloatBottomUp( card, width, height );
+	Rebate defaults;
+	const render::Uniforms u = render::Prepare( hostValuesOf( defaults ), width, height, 0.0 );
+
+	const unsigned threads = std::max( 1u, std::thread::hardware_concurrency() );
+	auto timeWith          = [ & ]( const render::Parallel& parallel ) {
+		std::vector< float > image = input;
+		render::Apply( u, image.data(), image.data(), parallel );//warm-up
+		double best = 1e9;
+		for( int run = 0; run < 3; ++run )
+		{
+			const auto start = std::chrono::steady_clock::now();
+			for( int frame = 0; frame < frames; ++frame )
+			{
+				image = input;
+				render::Apply( u, image.data(), image.data(), parallel );
+			}
+			const auto end = std::chrono::steady_clock::now();
+			best           = std::min( best, std::chrono::duration< double >( end - start ).count() * 1000.0 / frames );
+		}
+		return best;
+	};
+
+	std::printf( "render::Apply at %dx%d, the defaults, best of three runs of %d frames after a warm-up\n", width, height, frames );
+	std::printf( "  %2u threads  %8.2f ms/frame\n", threads, timeWith( threadedRows ) );
+	std::printf( "   1 thread   %8.2f ms/frame\n", timeWith( render::Parallel() ) );
+	return 0;
+}
+
 //---------------------------------------------------------------------------
 // --negative
 //
@@ -1933,11 +2446,15 @@ void usage()
 		"  --seed              grain is bit-identical for a seed and a frame, at any raster\n"
 		"  --resize            the scanner's levels survive a resize\n"
 		"  --negative          every check above can fail\n"
+		"  --cpu               the OpenFX build's CPU passes agree with the shaders, on the card\n"
+		"  --bench-cpu         time the OpenFX build's CPU render (render::Apply) at --size\n"
 		"  --perturb BITS      run the checks against a perturbed model (Model.h), verbosely\n"
 		"  --bench             time ProcessOpenGL at 720p through 4K\n"
 		"  --dump-shaders DIR  write the exact GLSL the plugin compiles\n"
 		"  --pipe              raw RGBA frames on stdin, raw RGBA frames on stdout\n"
 		"  --script PATH       parameter cues for --pipe: 'frame Name Value'\n"
+		"  --engine cpu        --pipe through the OpenFX build's CPU render (render::Apply), not GL\n"
+		"  --filter-bits N     with --engine cpu: quantise bilinear weights as a GPU does (test hook)\n"
 		"  --help\n" );
 }
 } // namespace
@@ -1957,6 +2474,9 @@ int main( int argc, char** argv )
 	bool wantList  = false;
 	bool wantBench = false;
 	bool wantPipe  = false;
+	bool wantBenchCpu = false;
+	bool cpuEngine    = false;
+	int filterBits    = 0;
 	std::vector< std::string > settings;
 	std::vector< std::string > checks;
 
@@ -2012,8 +2532,22 @@ int main( int argc, char** argv )
 			wantPipe = true;
 		else if( argument == "--curve" || argument == "--mask" || argument == "--grain" || argument == "--push"
 		         || argument == "--leak" || argument == "--cross" || argument == "--rebate" || argument == "--seed"
-		         || argument == "--resize" || argument == "--negative" )
+		         || argument == "--resize" || argument == "--negative" || argument == "--cpu" )
 			checks.push_back( argument );
+		else if( argument == "--bench-cpu" )
+			wantBenchCpu = true;
+		else if( argument == "--engine" && hasNext )
+		{
+			const std::string engine = argv[ ++i ];
+			if( engine != "cpu" && engine != "gpu" )
+			{
+				std::fprintf( stderr, "--engine wants gpu or cpu\n" );
+				return 2;
+			}
+			cpuEngine = engine == "cpu";
+		}
+		else if( argument == "--filter-bits" && hasNext )
+			filterBits = std::atoi( argv[ ++i ] );
 		else
 		{
 			std::fprintf( stderr, "unknown argument: %s\n", argument.c_str() );
@@ -2030,6 +2564,9 @@ int main( int argc, char** argv )
 
 	if( !dumpDir.empty() )
 		return dumpShaders( dumpDir );
+
+	if( wantBenchCpu )
+		return runBenchCpu( width, height, frames );//no GL
 
 	if( wantList )
 	{
@@ -2082,6 +2619,8 @@ int main( int argc, char** argv )
 				result = runResize( width, height, perturb );
 			else if( check == "--negative" )
 				result = runNegative( width, height );
+			else if( check == "--cpu" )
+				result = runCpu( width, height );
 			failures += result;
 			std::printf( "\n" );
 		}
@@ -2157,13 +2696,30 @@ int main( int argc, char** argv )
 			for( const auto& track : automation )
 				session.plugin.SetFloatParameter( track.first, valueAt( track.second, index ) );
 
-			if( !session.render( index, frame ) )
+			std::vector< unsigned char > out;
+			if( cpuEngine )
 			{
-				status = 1;
-				break;
+				//The OpenFX build's render, without a host: the same
+				//parameters, the same clock, render::Apply in float.
+				render::Uniforms u = render::Prepare( hostValuesOf( session.plugin ), width, height,
+				                                      static_cast< double >( index ) / fps );
+				u.filterBits       = filterBits;
+				std::vector< float > image = cardAsFloatBottomUp( frame, width, height );
+				render::Apply( u, image.data(), image.data(), threadedRows );
+				image = flipRows( image, width, height );
+				out.resize( image.size() );
+				for( size_t i = 0; i < image.size(); ++i )
+					out[ i ] = static_cast< unsigned char >( std::lround( std::clamp( image[ i ], 0.0f, 1.0f ) * 255.0f ) );
 			}
-
-			const std::vector< unsigned char > out = session.readBack();
+			else
+			{
+				if( !session.render( index, frame ) )
+				{
+					status = 1;
+					break;
+				}
+				out = session.readBack();
+			}
 			size_t written                         = 0;
 			while( written < out.size() )
 			{

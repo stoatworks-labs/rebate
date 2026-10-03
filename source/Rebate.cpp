@@ -36,15 +36,6 @@ constexpr int kClockVotes = 4;
 /// Seconds of host time a single frame is allowed to advance the clock by.
 constexpr double kMaxFrameDelta = 0.25;
 
-/// Film runs at 24 frames a second, so the grain changes 24 times a second
-/// whatever the host's rate.
-constexpr double kFilmRate = 24.0;
-
-/// Warmth 1: the leak's spectrum on the red, green and blue layers. A leak
-/// through the base reaches the red-sensitive layer (the bottom one) first,
-/// and what gets through to the top is what the lower layers passed.
-constexpr float kWarmLeak[ 3 ] = { 1.0f, 0.30f, 0.06f };
-
 /// Wall clock, for hosts that never call SetTime. Steady rather than system,
 /// so nothing here moves when the machine's clock is corrected.
 double wallSeconds()
@@ -75,41 +66,39 @@ Rebate::Rebate()
 	SetTimeSupported( true );
 
 	//---------------------------------------------------------------------
-	// Defaults. A 400-speed portrait negative, normally exposed and
-	// developed, grain at a third of its physical fluctuation, no leak,
-	// scanned manually with the lab's C-41 profile, on a 35 mm strip with
-	// its rebate. Manual rather than Auto Levels by default, so that every
-	// control does what it says out of the box: auto levels normalise away
-	// exposure, age fog and the missing mask of a cross-process, which is
-	// what a lab does and not what an operator reaching for Age expects.
+	// Defaults: a 400-speed portrait negative, scanned manually, on a 35 mm
+	// strip. They live in render::HostValues, which the OpenFX build reads
+	// too, so the two inspectors open on the same film; the reasoning for
+	// each is there.
 	//---------------------------------------------------------------------
-	params[ PT_EXPOSURE ] = controls::ExposureParam( 0.0f );
-	params[ PT_STOCK ]    = 1.0f;//Portrait 400
-	params[ PT_PUSH ]     = controls::PushParam( 0.0f );
-	params[ PT_AGE ]      = 0.0f;
+	const render::HostValues defaults;
+	params[ PT_EXPOSURE ] = defaults.exposure;
+	params[ PT_STOCK ]    = defaults.stock;
+	params[ PT_PUSH ]     = defaults.push;
+	params[ PT_AGE ]      = defaults.age;
 
-	params[ PT_PROCESS ] = 0.0f;//C-41
-	params[ PT_MASK ]    = 1.0f;
+	params[ PT_PROCESS ] = defaults.process;
+	params[ PT_MASK ]    = defaults.maskOn;
 
-	params[ PT_GRAIN_AMOUNT ] = 0.35f;
-	params[ PT_GRAIN_SIZE ]   = controls::GrainSizeParam( 1.5f );
-	params[ PT_GRAIN_SEED ]   = 1.0f;
+	params[ PT_GRAIN_AMOUNT ] = defaults.grainAmount;
+	params[ PT_GRAIN_SIZE ]   = defaults.grainSize;
+	params[ PT_GRAIN_SEED ]   = defaults.grainSeed;
 
-	params[ PT_LEAK_AMOUNT ] = 0.0f;
-	params[ PT_LEAK_EDGE ]   = 1.0f;//Right
-	params[ PT_LEAK_WARMTH ] = 0.8f;
-	params[ PT_LEAK_SPREAD ] = controls::LeakSpreadParam( 0.3f );
+	params[ PT_LEAK_AMOUNT ] = defaults.leakAmount;
+	params[ PT_LEAK_EDGE ]   = defaults.leakEdge;
+	params[ PT_LEAK_WARMTH ] = defaults.leakWarmth;
+	params[ PT_LEAK_SPREAD ] = defaults.leakSpread;
 
-	params[ PT_VIEW ]          = 0.0f;//Positive
-	params[ PT_AUTO_LEVELS ]   = 0.0f;
-	params[ PT_BLACK_POINT ]   = controls::BlackPointParam( 0.05f );
-	params[ PT_WHITE_POINT ]   = controls::WhitePointParam( 1.25f );
-	params[ PT_SCANNER_GAMMA ] = controls::ScannerGammaParam( 1.0f );
+	params[ PT_VIEW ]          = defaults.view;
+	params[ PT_AUTO_LEVELS ]   = defaults.autoLevels;
+	params[ PT_BLACK_POINT ]   = defaults.blackPoint;
+	params[ PT_WHITE_POINT ]   = defaults.whitePoint;
+	params[ PT_SCANNER_GAMMA ] = defaults.scannerGamma;
 
-	params[ PT_FORMAT ]       = 2.0f;//35 mm
-	params[ PT_EDGE_TEXT ]    = 1.0f;
-	params[ PT_FRAME_NUMBER ] = 12.0f;
-	params[ PT_MIX ]          = 1.0f;
+	params[ PT_FORMAT ]       = defaults.format;
+	params[ PT_EDGE_TEXT ]    = defaults.edgeText;
+	params[ PT_FRAME_NUMBER ] = defaults.frameNumber;
+	params[ PT_MIX ]          = defaults.mix;
 
 	//---------------------------------------------------------------------
 	// Declaration. Every ranged FF_TYPE_STANDARD parameter is a plain 0..1
@@ -135,7 +124,7 @@ Rebate::Rebate()
 	SetParamInfof( PT_AGE, "Age", FF_TYPE_STANDARD );
 
 	declareOptions( PT_PROCESS, "Process", controls::kProcessCount, controls::ProcessName );
-	SetParamInfo( PT_MASK, "Mask On", FF_TYPE_BOOLEAN, true );
+	SetParamInfo( PT_MASK, "Mask On", FF_TYPE_BOOLEAN, defaults.maskOn > 0.5f );
 
 	SetParamInfof( PT_GRAIN_AMOUNT, "Grain Amount", FF_TYPE_STANDARD );
 	SetParamInfof( PT_GRAIN_SIZE, "Grain Size", FF_TYPE_STANDARD );
@@ -147,13 +136,13 @@ Rebate::Rebate()
 	SetParamInfof( PT_LEAK_SPREAD, "Leak Spread", FF_TYPE_STANDARD );
 
 	declareOptions( PT_VIEW, "View", controls::kViewCount, controls::ViewName );
-	SetParamInfo( PT_AUTO_LEVELS, "Auto Levels", FF_TYPE_BOOLEAN, false );
+	SetParamInfo( PT_AUTO_LEVELS, "Auto Levels", FF_TYPE_BOOLEAN, defaults.autoLevels > 0.5f );
 	SetParamInfof( PT_BLACK_POINT, "Black Point", FF_TYPE_STANDARD );
 	SetParamInfof( PT_WHITE_POINT, "White Point", FF_TYPE_STANDARD );
 	SetParamInfof( PT_SCANNER_GAMMA, "Scanner Gamma", FF_TYPE_STANDARD );
 
 	declareOptions( PT_FORMAT, "Format", controls::kFormatCount, controls::FormatName );
-	SetParamInfo( PT_EDGE_TEXT, "Edge Text On", FF_TYPE_BOOLEAN, true );
+	SetParamInfo( PT_EDGE_TEXT, "Edge Text On", FF_TYPE_BOOLEAN, defaults.edgeText > 0.5f );
 	declareInteger( PT_FRAME_NUMBER, "Frame Number", 0.0f, 99.0f );
 	SetParamInfof( PT_MIX, "Mix", FF_TYPE_STANDARD );
 
@@ -290,6 +279,35 @@ double Rebate::nowSeconds()
 }
 
 //---------------------------------------------------------------------------
+render::HostValues Rebate::hostValues() const
+{
+	render::HostValues v;
+	v.exposure     = params[ PT_EXPOSURE ];
+	v.stock        = params[ PT_STOCK ];
+	v.push         = params[ PT_PUSH ];
+	v.age          = params[ PT_AGE ];
+	v.process      = params[ PT_PROCESS ];
+	v.maskOn       = params[ PT_MASK ];
+	v.grainAmount  = params[ PT_GRAIN_AMOUNT ];
+	v.grainSize    = params[ PT_GRAIN_SIZE ];
+	v.grainSeed    = params[ PT_GRAIN_SEED ];
+	v.leakAmount   = params[ PT_LEAK_AMOUNT ];
+	v.leakEdge     = params[ PT_LEAK_EDGE ];
+	v.leakWarmth   = params[ PT_LEAK_WARMTH ];
+	v.leakSpread   = params[ PT_LEAK_SPREAD ];
+	v.view         = params[ PT_VIEW ];
+	v.autoLevels   = params[ PT_AUTO_LEVELS ];
+	v.blackPoint   = params[ PT_BLACK_POINT ];
+	v.whitePoint   = params[ PT_WHITE_POINT ];
+	v.scannerGamma = params[ PT_SCANNER_GAMMA ];
+	v.format       = params[ PT_FORMAT ];
+	v.edgeText     = params[ PT_EDGE_TEXT ];
+	v.frameNumber  = params[ PT_FRAME_NUMBER ];
+	v.mix          = params[ PT_MIX ];
+	return v;
+}
+
+//---------------------------------------------------------------------------
 bool Rebate::uploadText( const frame::Geometry& geometry, const char* code, int frameNumber, bool on )
 {
 	frame::TextStrip strip = frame::BuildText( geometry, code, frameNumber, on );
@@ -345,58 +363,13 @@ FFResult Rebate::ProcessOpenGL( ProcessOpenGLStruct* pGL )
 		diag::info( "host clock at frame 60: raw=" + std::to_string( hostTime ) + " scale=" + std::to_string( clockScale )
 		            + " seconds=" + std::to_string( now ) );
 
-	const double filmFrames = std::floor( std::max( now, 0.0 ) * kFilmRate + 1e-6 );
-	const int grainFrame    = static_cast< int >( std::fmod( filmFrames, 16777216.0 ) );
-
 	//---------------------------------------------------------------------
-	// What the controls say.
+	// What the controls say, and the grain's film frame: render::Prepare,
+	// which the OpenFX build calls too. Every uniform below comes from it.
 	//---------------------------------------------------------------------
-	const model::Stock& stock = model::StockAt( controls::OptionIndex( params[ PT_STOCK ], model::kStockCount ) );
-	const int process         = controls::OptionIndex( params[ PT_PROCESS ], controls::kProcessCount );
-	const bool maskOn         = params[ PT_MASK ] > 0.5f;
-	const double exposure     = controls::ExposureStops( params[ PT_EXPOSURE ] );
-	const double push         = controls::PushStops( params[ PT_PUSH ] );
-	const double age          = std::clamp( stock.age + controls::Age( params[ PT_AGE ] ), 0.0, 1.0 );
-
-	const model::Curve curve = model::Develop( stock, process, push, maskOn,
-	                                           ( perturb & model::kPerturbPushGain ) ? 0.5 : 1.0 );
-	const model::Profile profile =
-		model::ScannerProfile( stock, process, ( perturb & model::kPerturbCrossProfile ) == 0 );
-	const bool invert = model::Inverts( process );
-
-	const double toeExposure = std::pow( 10.0, curve.toe );
-	float speed[ 3 ], fogExposure[ 3 ];
-	for( int i = 0; i < 3; ++i )
-	{
-		speed[ i ]       = static_cast< float >( std::exp2( exposure ) * std::pow( 10.0, -age * model::kAgeSpeedLoss[ i ] ) );
-		fogExposure[ i ] = static_cast< float >( age * model::kAgeFog[ i ] * toeExposure );
-	}
-	const float textExposure = static_cast< float >( std::pow( 10.0, curve.toe + 0.8 * curve.latitude ) );
-
-	const float grainAmount = controls::GrainAmount( params[ PT_GRAIN_AMOUNT ] );
-	const float grainCell   = controls::GrainCellPixels( params[ PT_GRAIN_SIZE ] );
-	const int grainSites    = std::clamp( stock.grainSites, 1, model::kMaxGrainSites );
-	const int seed          = std::clamp( static_cast< int >( std::lround( params[ PT_GRAIN_SEED ] ) ), 0, 999 );
-
-	const double leakExposure = controls::LeakExposure( params[ PT_LEAK_AMOUNT ] );
-	const int leakEdge        = controls::OptionIndex( params[ PT_LEAK_EDGE ], controls::kLeakEdgeCount );
-	const float warmth        = std::clamp( params[ PT_LEAK_WARMTH ], 0.0f, 1.0f );
-	const float leakSpread    = controls::LeakSpread( params[ PT_LEAK_SPREAD ] );
-	float leakWeights[ 3 ];
-	for( int i = 0; i < 3; ++i )
-		leakWeights[ i ] = 1.0f + ( kWarmLeak[ i ] - 1.0f ) * warmth;
-
-	const int view        = controls::OptionIndex( params[ PT_VIEW ], controls::kViewCount );
-	const bool autoLevels = params[ PT_AUTO_LEVELS ] > 0.5f;
-	const float blackPt   = controls::BlackPoint( params[ PT_BLACK_POINT ] );
-	const float whitePt   = controls::WhitePoint( params[ PT_WHITE_POINT ] );
-	const float scanGamma = controls::ScannerGamma( params[ PT_SCANNER_GAMMA ] );
-
-	const int format      = controls::OptionIndex( params[ PT_FORMAT ], controls::kFormatCount );
-	const bool edgeText   = params[ PT_EDGE_TEXT ] > 0.5f;
-	const int frameNumber = std::clamp( static_cast< int >( std::lround( params[ PT_FRAME_NUMBER ] ) ), 0, 99 );
-
-	const frame::Geometry geometry = frame::Compute( format, width, height );
+	const render::Uniforms u        = render::Prepare( hostValues(), width, height, now, perturb );
+	const model::Curve& curve       = u.curve;
+	const frame::Geometry& geometry = u.geometry;
 
 	//---------------------------------------------------------------------
 	// Buffers, and the text. Every allocation and every upload happens here,
@@ -408,8 +381,8 @@ FFResult Rebate::ProcessOpenGL( ProcessOpenGLStruct* pGL )
 	// reallocates them -- and so never clears the levels the scanner has
 	// settled on. That is the photofinish trap, avoided by construction.
 	//---------------------------------------------------------------------
-	const int gridW      = std::min( kGridW, width );
-	const int gridH      = std::min( kGridH, height );
+	const int gridW      = u.gridW;
+	const int gridH      = u.gridH;
 	const bool allocated = picture.Ensure( width, height, GL_RGBA32F, PassBuffer::Sampling::Linear )
 	                       && film.Ensure( width, height, GL_RGBA32F, PassBuffer::Sampling::Nearest )
 	                       && blocks.Ensure( gridW, gridH, GL_RGBA32F, PassBuffer::Sampling::Nearest )
@@ -420,7 +393,7 @@ FFResult Rebate::ProcessOpenGL( ProcessOpenGLStruct* pGL )
 		diag::error( "could not allocate the pass buffers at " + std::to_string( width ) + "x" + std::to_string( height ) );
 		return FF_FAIL;
 	}
-	uploadText( geometry, stock.code, frameNumber, edgeText );
+	uploadText( geometry, u.stock->code, u.frameNumber, u.edgeText );
 
 	const bool resized = lastWidth != 0 && ( lastWidth != width || lastHeight != height );
 	lastWidth          = width;
@@ -428,7 +401,7 @@ FFResult Rebate::ProcessOpenGL( ProcessOpenGLStruct* pGL )
 	if( resized && ( perturb & model::kPerturbResizeClears ) )
 		levelsPrimed = false;
 
-	const bool autoActive = autoLevels && view == 0;
+	const bool autoActive = u.autoActive;
 	if( autoActive && !autoWasActive )
 		levelsPrimed = false;//switched on: take the next measurement outright
 	autoWasActive = autoActive;
@@ -505,20 +478,20 @@ FFResult Rebate::ProcessOpenGL( ProcessOpenGLStruct* pGL )
 		filmShader.Set( "StripLeft", static_cast< float >( geometry.stripLeftMm ) );
 		filmShader.Set( "TextSize", static_cast< float >( textWidth ), static_cast< float >( textHeight ) );
 		filmShader.Set( "GlyphsPerMm", static_cast< float >( frame::kGlyphRowsPerMm ) );
-		filmShader.Set( "TextExposure", textExposure );
+		filmShader.Set( "TextExposure", u.textExposure );
 
 		float crossover[ 9 ];
 		for( int r = 0; r < 3; ++r )
 			for( int c = 0; c < 3; ++c )
 				crossover[ r * 3 + c ] = static_cast< float >( model::kCrossover[ r ][ c ] );
 		glUniformMatrix3fv( filmShader.FindUniform( "Crossover" ), 1, GL_TRUE, crossover );
-		filmShader.Set( "Speed", speed[ 0 ], speed[ 1 ], speed[ 2 ] );
-		filmShader.Set( "FogExposure", fogExposure[ 0 ], fogExposure[ 1 ], fogExposure[ 2 ] );
+		filmShader.Set( "Speed", u.speed[ 0 ], u.speed[ 1 ], u.speed[ 2 ] );
+		filmShader.Set( "FogExposure", u.fogExposure[ 0 ], u.fogExposure[ 1 ], u.fogExposure[ 2 ] );
 
-		filmShader.Set( "LeakExposure", static_cast< float >( leakExposure ) );
-		filmShader.Set( "LeakEdge", leakEdge );
-		filmShader.Set( "LeakSpread", leakSpread );
-		filmShader.Set( "LeakWeights", leakWeights[ 0 ], leakWeights[ 1 ], leakWeights[ 2 ] );
+		filmShader.Set( "LeakExposure", static_cast< float >( u.leakExposure ) );
+		filmShader.Set( "LeakEdge", u.leakEdge );
+		filmShader.Set( "LeakSpread", u.leakSpread );
+		filmShader.Set( "LeakWeights", u.leakWeights[ 0 ], u.leakWeights[ 1 ], u.leakWeights[ 2 ] );
 		quad.Draw();
 	}
 
@@ -584,22 +557,22 @@ FFResult Rebate::ProcessOpenGL( ProcessOpenGLStruct* pGL )
 		scanShader.Set( "MaxUV", maxCoords.s, maxCoords.t );
 		glUniform2i( scanShader.FindUniform( "Size" ), width, height );
 
-		scanShader.Set( "View", view );
-		scanShader.Set( "Invert", invert ? 1 : 0 );
-		scanShader.Set( "AutoLevels", autoLevels ? 1 : 0 );
-		scanShader.Set( "ProfileBase", static_cast< float >( profile.base[ 0 ] ), static_cast< float >( profile.base[ 1 ] ),
-		                static_cast< float >( profile.base[ 2 ] ) );
-		scanShader.Set( "ProfileGamma", static_cast< float >( profile.gamma ) );
-		scanShader.Set( "BlackPoint", blackPt );
-		scanShader.Set( "WhitePoint", whitePt );
-		scanShader.Set( "ScanGamma", scanGamma );
+		scanShader.Set( "View", u.view );
+		scanShader.Set( "Invert", u.invert ? 1 : 0 );
+		scanShader.Set( "AutoLevels", u.autoLevels ? 1 : 0 );
+		scanShader.Set( "ProfileBase", static_cast< float >( u.profile.base[ 0 ] ), static_cast< float >( u.profile.base[ 1 ] ),
+		                static_cast< float >( u.profile.base[ 2 ] ) );
+		scanShader.Set( "ProfileGamma", static_cast< float >( u.profile.gamma ) );
+		scanShader.Set( "BlackPoint", u.blackPoint );
+		scanShader.Set( "WhitePoint", u.whitePoint );
+		scanShader.Set( "ScanGamma", u.scanGamma );
 
-		scanShader.Set( "GrainAmount", grainAmount );
-		scanShader.Set( "GrainCell", grainCell );
-		scanShader.Set( "GrainSites", grainSites );
-		scanShader.Set( "Seed", seed );
-		scanShader.Set( "GrainFrame", grainFrame );
-		scanShader.Set( "MixAmount", std::clamp( params[ PT_MIX ], 0.0f, 1.0f ) );
+		scanShader.Set( "GrainAmount", u.grainAmount );
+		scanShader.Set( "GrainCell", u.grainCell );
+		scanShader.Set( "GrainSites", u.grainSites );
+		scanShader.Set( "Seed", u.seed );
+		scanShader.Set( "GrainFrame", u.grainFrame );
+		scanShader.Set( "MixAmount", u.mix );
 		quad.Draw();
 	}
 
