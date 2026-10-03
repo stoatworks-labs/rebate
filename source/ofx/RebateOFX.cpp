@@ -269,11 +269,17 @@ public:
 		if( dst == nullptr || src == nullptr )
 			OFX::throwSuiteStatusException( kOfxStatFailed );
 
-		const OFX::BitDepthEnum depth       = dst->getPixelDepth();
-		const OFX::PixelComponentEnum comps = dst->getPixelComponents();
+		//One depth for both clips (setSupportsMultipleClipDepths( false )),
+		//but the components may differ -- an RGB source into an RGBA output
+		//is legal -- so each side is read in its own.
+		const OFX::BitDepthEnum depth          = dst->getPixelDepth();
+		const OFX::PixelComponentEnum comps    = dst->getPixelComponents();
+		const OFX::PixelComponentEnum srcComps = src->getPixelComponents();
 		if( comps != OFX::ePixelComponentRGBA && comps != OFX::ePixelComponentRGB )
 			OFX::throwSuiteStatusException( kOfxStatErrUnsupported );
-		if( src->getPixelDepth() != depth || src->getPixelComponents() != comps )
+		if( srcComps != OFX::ePixelComponentRGBA && srcComps != OFX::ePixelComponentRGB )
+			OFX::throwSuiteStatusException( kOfxStatErrUnsupported );
+		if( src->getPixelDepth() != depth )
 			OFX::throwSuiteStatusException( kOfxStatErrImageFormat );
 
 		//The film's raster is the output's: its full width fills the output's
@@ -303,23 +309,26 @@ public:
 
 		//An RGB clip has no alpha to be premultiplied by; treating it as
 		//premultiplied is what makes the round trip an identity there.
+		const bool srcPremultiplied =
+			srcComps != OFX::ePixelComponentRGBA || srcClip->getPreMultiplication() != OFX::eImageUnPreMultiplied;
 		const bool premultiplied =
-			comps != OFX::ePixelComponentRGBA || srcClip->getPreMultiplication() != OFX::eImageUnPreMultiplied;
+			comps != OFX::ePixelComponentRGBA || dstClip->getPreMultiplication() != OFX::eImageUnPreMultiplied;
 
 		std::vector< float > frame( static_cast< size_t >( width ) * height * 4 );
 		switch( depth )
 		{
 		case OFX::eBitDepthUByte:
-			comps == OFX::ePixelComponentRGBA ? gather< unsigned char, 4, 255 >( src.get(), bounds, premultiplied, frame )
-			                                  : gather< unsigned char, 3, 255 >( src.get(), bounds, premultiplied, frame );
+			srcComps == OFX::ePixelComponentRGBA ? gather< unsigned char, 4, 255 >( src.get(), bounds, srcPremultiplied, frame )
+			                                     : gather< unsigned char, 3, 255 >( src.get(), bounds, srcPremultiplied, frame );
 			break;
 		case OFX::eBitDepthUShort:
-			comps == OFX::ePixelComponentRGBA ? gather< unsigned short, 4, 65535 >( src.get(), bounds, premultiplied, frame )
-			                                  : gather< unsigned short, 3, 65535 >( src.get(), bounds, premultiplied, frame );
+			srcComps == OFX::ePixelComponentRGBA
+				? gather< unsigned short, 4, 65535 >( src.get(), bounds, srcPremultiplied, frame )
+				: gather< unsigned short, 3, 65535 >( src.get(), bounds, srcPremultiplied, frame );
 			break;
 		case OFX::eBitDepthFloat:
-			comps == OFX::ePixelComponentRGBA ? gather< float, 4, 1 >( src.get(), bounds, premultiplied, frame )
-			                                  : gather< float, 3, 1 >( src.get(), bounds, premultiplied, frame );
+			srcComps == OFX::ePixelComponentRGBA ? gather< float, 4, 1 >( src.get(), bounds, srcPremultiplied, frame )
+			                                     : gather< float, 3, 1 >( src.get(), bounds, srcPremultiplied, frame );
 			break;
 		default:
 			OFX::throwSuiteStatusException( kOfxStatErrUnsupported );
