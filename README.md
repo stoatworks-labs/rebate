@@ -33,16 +33,16 @@ Resolume. The 400-speed portrait negative on a 35 mm strip, with a leak.</sub>
 
 ## Download
 
-**[v0.2.0](https://github.com/stoatworks-labs/rebate/releases/tag/v0.2.0)** — prebuilt for macOS, Windows and Linux. Pick your platform:
+**[v0.3.0](https://github.com/stoatworks-labs/rebate/releases/tag/v0.3.0)** — prebuilt for macOS, Windows and Linux. Pick your platform:
 
 <details>
 <summary><b>macOS</b> — Universal (Apple Silicon + Intel)</summary>
 
 | Build | Download | Size |
 | --- | --- | --- |
-| Universal (Apple Silicon + Intel) · .dmg disk image | [`rebate-0.2.0-macos-universal.dmg`](https://github.com/stoatworks-labs/rebate/releases/download/v0.2.0/rebate-0.2.0-macos-universal.dmg) | 266 KB |
+| Universal (Apple Silicon + Intel) · .dmg disk image | [`rebate-0.3.0-macos-universal.dmg`](https://github.com/stoatworks-labs/rebate/releases/download/v0.3.0/rebate-0.3.0-macos-universal.dmg) | 268 KB |
 | Universal (Apple Silicon + Intel) · .zip archive | [`rebate-macos-universal.zip`](https://github.com/stoatworks-labs/rebate/releases/latest/download/rebate-macos-universal.zip) | 219 KB |
-| Universal (Apple Silicon + Intel) · .zip archive (OpenFX — Resolve, Vegas, Nuke) | [`rebate-ofx-macos-universal.zip`](https://github.com/stoatworks-labs/rebate/releases/latest/download/rebate-ofx-macos-universal.zip) | 274 KB |
+| Universal (Apple Silicon + Intel) · .zip archive (OpenFX — Resolve, Vegas, Nuke) | [`rebate-ofx-macos-universal.zip`](https://github.com/stoatworks-labs/rebate/releases/latest/download/rebate-ofx-macos-universal.zip) | 275 KB |
 
 </details>
 
@@ -51,7 +51,7 @@ Resolume. The 400-speed portrait negative on a 35 mm strip, with a leak.</sub>
 
 | Build | Download | Size |
 | --- | --- | --- |
-| x64 · .exe installer | [`rebate-0.2.0-windows-x86_64-setup.exe`](https://github.com/stoatworks-labs/rebate/releases/download/v0.2.0/rebate-0.2.0-windows-x86_64-setup.exe) | 231 KB |
+| x64 · .exe installer | [`rebate-0.3.0-windows-x86_64-setup.exe`](https://github.com/stoatworks-labs/rebate/releases/download/v0.3.0/rebate-0.3.0-windows-x86_64-setup.exe) | 232 KB |
 | x64 · .zip archive | [`rebate-windows-x86_64.zip`](https://github.com/stoatworks-labs/rebate/releases/latest/download/rebate-windows-x86_64.zip) | 119 KB |
 | x64 · .zip archive (OpenFX — Resolve, Vegas, Nuke) | [`rebate-ofx-windows-x86_64.zip`](https://github.com/stoatworks-labs/rebate/releases/latest/download/rebate-ofx-windows-x86_64.zip) | 81 KB |
 
@@ -62,7 +62,7 @@ Resolume. The 400-speed portrait negative on a 35 mm strip, with a leak.</sub>
 
 | Build | Download | Size |
 | --- | --- | --- |
-| x64 · .zip archive (OpenFX — Resolve, Vegas, Nuke) | [`rebate-ofx-linux-x86_64.zip`](https://github.com/stoatworks-labs/rebate/releases/latest/download/rebate-ofx-linux-x86_64.zip) | 733 KB |
+| x64 · .zip archive (OpenFX — Resolve, Vegas, Nuke) | [`rebate-ofx-linux-x86_64.zip`](https://github.com/stoatworks-labs/rebate/releases/latest/download/rebate-ofx-linux-x86_64.zip) | 734 KB |
 
 </details>
 
