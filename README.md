@@ -15,8 +15,9 @@
 > is not Resolume. On Windows, a build of v0.1.0 loads, registers and renders in
 > Resolume Arena 7.27.1 with every control as declared, on software rendering. The
 > [OpenFX build](#openfx--resolve-vegas-nuke-natron) renders the same film on the CPU
-> and is checked against the shaders pixel for pixel, but has only ever run in the
-> fleet's command-line OFX test host — never in Resolve, Vegas, Nuke or Natron. See
+> and is checked against the shaders pixel for pixel. As a Fusion tool in DaVinci
+> Resolve Studio 21.1 on macOS it renders what the fleet's command-line OFX test host
+> does, to within 1/255; it has never been in Vegas, Nuke or Natron. See
 > [Status](#status).
 
 Colour negative film, and the scan of it, as an FFGL effect for
@@ -151,9 +152,10 @@ per-pixel passes are a line-for-line copy of its shaders (`source/Render.cpp`), 
 controls, same groups, same 0..1 ranges and defaults, so the
 [user guide](docs/USER-GUIDE.md) covers both.
 
-Take the `rebate-ofx-*` zip for your platform from a release that carries one (the
-first is the release after v0.1.0) and copy `Rebate.ofx.bundle` into the standard
-OpenFX folder, then restart the host:
+Releases carry it from **v0.2.0**, as zips of its own beside the Resolume build's:
+`rebate-ofx-macos-universal.zip`, `rebate-ofx-windows-x86_64.zip` and
+`rebate-ofx-linux-x86_64.zip`. Take the one for your platform, copy
+`Rebate.ofx.bundle` into the standard OpenFX folder, then restart the host:
 
 ```
 macOS    /Library/OFX/Plugins/
@@ -206,7 +208,8 @@ scan is opaque.
 
 ## Status
 
-**v0.1.0, and honestly early — 23 September 2026.**
+**v0.2.0, and honestly early — 4 October 2026.** v0.2.0 adds the OpenFX build; the
+Resolume build renders as it did at v0.1.0.
 
 ### Measured offline, on macOS
 
@@ -264,7 +267,7 @@ JavaScript, and nothing checks a port but a reader.
 
 ### The OpenFX build
 
-On `main`, not yet in a release. Measured on the same machine on 2026-10-03:
+Released at v0.2.0. Measured on the same machine on 2026-10-03:
 
 | check | result |
 | --- | --- |
@@ -272,18 +275,19 @@ On `main`, not yet in a release. Measured on the same machine on 2026-10-03:
 | the OpenFX bundle in a host | the fleet's CPU OFX test host (ofxprobe, from resolume-ofx-bridge) loads `com.stoatworks.rebate` as Rebate / Stoatworks with every control, group and the About block, and renders. A hard-edged 1920×1080 colour card through the OFX bundle is **byte-identical** to the same card through `rbtest --pipe --engine cpu` (the harness running `render::Apply` itself) at all 15 settings tried, so the OFX marshalling adds nothing |
 | against the Resolume build | the same card through the FFGL plugin (`rbtest --pipe`) and the OFX bundle at 15 settings. In Full, which reads the scene unfiltered, **12** and **127** pixels of 2,073,600 differ (all but five by 1/255; the five are grain). In the film formats **0.19–0.72%** of pixels differ, worst **18/255** (Cross) at the default grain, all on the scene's hard edges and in the edge print; at Grain Amount 1, 0.05–0.10% differ by up to 53/255, where an edge's filtered value moves a grain site across its threshold. That is the GPU's 8-bit filter weights: the CPU render with its weights rounded the same way differs from the FFGL plugin at **0.001–0.03%** of pixels (0.28% under Mix 0.5, by one step). A control (the GPU at Portrait 400, OFX at Fine 100) differs at **39%** of pixels |
 | Fusion's missing frame rate | Resolve's Fusion page reports no frame rate, and the first OpenFX build failed there (found by the real-Resolve check on sibling ports). Under the test host's `--quirks fusion`, which imitates it, the earlier build fails with `kOfxStatErrMissingHostFeature`; this one renders, **byte-identical** to a 24 fps host's render of the same frame and unmoved by the rate the host does not report. `tools/verify.sh` checks it when that host is available |
+| in DaVinci Resolve | **Resolve Studio 21.1** on macOS (2026-10-04), the bundle as a **Fusion tool** at the default controls: it renders, and six frames rendered out of Resolve match the test host's renders of the same frames at 24 fps, Fusion's fallback rate, in every pixel but **one**, which is off by 1/255 |
 | determinism | frame 9 of a changing sequence is byte-identical rendered alone, after frames 0–8 in one instance, and after 9, 3, 11 out of order; at 25 fps frames 0 and 1 share film frame 0 and grain identically, frame 2 does not |
 | float | a float render and an 8-bit render of an 8-bit card are byte-identical after the host's rounding; `rbtest --cpu`'s float wedges carry values above 1 through both builds alike |
 | bundle | universal, exports `OfxGetPlugin`, `CFBundleExecutable` is on disk, ad-hoc signs; CI builds it for Windows x64 and for Linux on AlmaLinux 8, and a stock Rocky 8 container dlopens it and lists its plugin |
 | render cost | **~30 ms** per 1920×1080 frame on 16 threads (best of three runs of 10), **~250 ms** on one; **~40 ms** in the test host, which caps itself at 8 threads |
 
-**Not established:** it has **never been loaded in DaVinci Resolve, Vegas, Nuke or
-Natron**, on any platform (Fusion's missing frame rate is imitated by the test
-host, not seen in Resolve itself); the only host it has met is the command-line test host,
-which renders at scale 1, never tiles, and hands over 8-bit or float RGBA. 16-bit
-clips, RGB-only clips, unpremultiplied clips and reduced render scales are handled
-in the code and have not been exercised by any host. The Windows build has only
-been compiled, and the Linux build only loaded.
+**Not established:** it has **never been loaded in Vegas, Nuke or Natron**, and in
+Resolve only on macOS, as a Fusion tool at the default controls; the other host it
+has met is the command-line test host, which renders at scale 1, never tiles, and
+hands over 8-bit or float RGBA. 16-bit clips, RGB-only clips, unpremultiplied clips
+and reduced render scales are handled in the code and have not been exercised by the
+test host; what Resolve handed the plugin was not checked. The Windows build has
+only been compiled, and the Linux build only loaded; neither has rendered in a host.
 
 The [user guide](docs/USER-GUIDE.md) covers every control, what it does and why.
 

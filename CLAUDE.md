@@ -112,9 +112,12 @@ scanner.
 - Seen on the synthetic card and on Resolume's demo clips (the project video, through
   `--pipe`), never on camera footage of people or places.
 - No factory presets.
-- **The OpenFX build has never been in Resolve, Vegas, Nuke or Natron.** It has met
-  only the fleet's command-line OFX host (8-bit and float RGBA, scale 1, no tiles);
-  Windows is compiled by CI, Linux is dlopened on Rocky 8 by CI, neither has rendered.
+- **The OpenFX build has never been in Vegas, Nuke or Natron**, and in Resolve only as
+  a Fusion tool: Resolve Studio 21.1 on macOS (2026-10-04), at the defaults, rendered
+  six frames matching the test host at 24 fps, one pixel off by 1/255. Otherwise it
+  has met only the fleet's command-line OFX host (8-bit and float RGBA, scale 1, no
+  tiles); Windows is compiled by CI, Linux is dlopened on Rocky 8 by CI, neither has
+  rendered.
 - **The browser demo's CPU half is a port and nothing checks it.** `demo/plugin.js`
   re-implements Model.cpp, Controls.cpp, Frame.cpp and the per-frame arithmetic
   (`render::Prepare`, and the levels' step in `ProcessOpenGL`) in JavaScript. `check_shaders.py` covers the GLSL and the glyph

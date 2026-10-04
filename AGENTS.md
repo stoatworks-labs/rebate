@@ -483,6 +483,11 @@ and 333×187 by hand.
   Amount 1 and unchanged when the host's unreported rate is 30. Frames 0 and 1 grain
   differently under the quirk (one film frame per timeline frame) where a 25 fps
   host grains them alike. Every normal-host result above is unchanged.
+- **In a real Resolve** (2026-10-04, by the lead): Resolve Studio 21.1 on macOS, the
+  bundle as a Fusion tool at the default controls. It renders, and six frames
+  rendered out of Resolve match the test host's renders of the same frames at
+  24 fps (Fusion's fallback) in every pixel but one, off by 1/255. Only as a Fusion
+  tool, and only at the defaults.
 - **Cost**: `render::Apply` at 1920×1080, ~29–30 ms on 16 threads, ~250 ms on one;
   ~40 ms in ofxhost, which uses 8.
 - **The bundle** is universal, exports `OfxGetPlugin`, its plist names its binary,
@@ -512,10 +517,12 @@ and 333×187 by hand.
   sweep; at reductions over 2× it would alias. The formats reduce by at most ~1.6×.
 - **E-6 through a manual scan** uses the same Black/White Point controls, which are
   scaled for a negative's density range; Auto Levels suits E-6 better.
-- ☠️ **The OpenFX build has never been in a real OFX host** — not Resolve, Vegas,
-  Nuke or Natron, on any platform. ofxhost renders at scale 1, never tiles, hands
+- ☠️ **The OpenFX build has been in one real OFX host, once**: Resolve Studio 21.1
+  on macOS, as a Fusion tool at the defaults (above). Never Vegas, Nuke or Natron.
+  Otherwise ofxhost is all it has met: it renders at scale 1, never tiles, hands
   over 8-bit or float RGBA, premultiplied; 16-bit, RGB-only and unpremultiplied
-  clips and reduced render scales are handled in the code and unexercised. The
+  clips and reduced render scales are handled in the code and unexercised there
+  (what Resolve handed over was not checked). The
   Windows build is compiled by CI and has never run; the Linux build is loaded by a
   Rocky 8 dlopen test in CI and has never rendered.
 - **The browser demo's CPU half is a port that nothing checks** — see below.

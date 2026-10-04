@@ -16,8 +16,9 @@ drawn.
 *The harness's test card through the plugin, rendered by the offline harness rather than
 captured from Resolume. Portrait 400 on a 35 mm strip, with a leak from the right.*
 
-> **Before you rely on this:** first released at **v0.1.0**, and honestly early. The film is
-> measured rather than asserted, by a harness that drives the real plugin class, at two
+> **Before you rely on this:** released at **v0.2.0**, which added the OpenFX build, and
+> honestly early. The film is measured rather than asserted, by a harness that drives the real
+> plugin class, at two
 > resolutions: a grey wedge's density climbs with slope 0.57948 for a stated γ of 0.58, inside a
 > band derived from the curve's own bends, and the toe and shoulder land 1.2e-3 log units from
 > where the curve says; a neutral wedge through C-41 with its orange mask, scanned manually,
@@ -34,9 +35,11 @@ captured from Resolume. Portrait 400 on a 35 mm strip, with a leak from the righ
 > and Resolume's own demo clips put through the harness.
 > Try it on a spare layer before you put it in a show.
 >
-> **The OpenFX build has never been loaded in Resolve, Vegas, Nuke or Natron.** It renders
-> the same film on the CPU and is checked against the shaders pixel for pixel, but the only
-> host it has met is the fleet's command-line OpenFX test host.
+> **The OpenFX build has been in one real host: DaVinci Resolve, as a Fusion tool.** It renders
+> the same film on the CPU and is checked against the shaders pixel for pixel. In Resolve Studio
+> 21.1 on macOS, at the default controls, it rendered the same frames as the fleet's
+> command-line OpenFX test host, to within 1/255. It has never been loaded in Vegas, Nuke or
+> Natron, and the Windows and Linux builds have never rendered in a host.
 >
 > This codebase was created with AI assistance, directed and reviewed by a human author.
 
@@ -44,7 +47,7 @@ captured from Resolume. Portrait 400 on a 35 mm strip, with a leak from the righ
 
 ## Installing
 
-Every download carries one effect, **SW Rebate**. Drop it into Resolume's effects folder and
+Every Resolume download carries one effect, **SW Rebate**. Drop it into Resolume's effects folder and
 restart Resolume:
 
 ```
@@ -62,9 +65,9 @@ SmartScreen once: **More info** → **Run anyway**.
 
 ### OpenFX: Resolve, Vegas, Nuke, Natron
 
-The OpenFX build is a separate download, `rebate-ofx-<platform>.zip`, from the first release
-that carries one (the release after v0.1.0). Copy `Rebate.ofx.bundle` into the system's OpenFX
-folder and restart the host:
+The OpenFX build is a separate download from **v0.2.0** on: `rebate-ofx-macos-universal.zip`,
+`rebate-ofx-windows-x86_64.zip` or `rebate-ofx-linux-x86_64.zip`. Copy `Rebate.ofx.bundle` into
+the system's OpenFX folder and restart the host:
 
 ```
 macOS    /Library/OFX/Plugins/
@@ -487,10 +490,12 @@ if it could not be allocated.
   there checked its clock.
 - **Not verified at 4K**, only timed there.
 - **No presets.** The Stock menu is the nearest thing to a preset list.
-- **The OpenFX build has never run in Resolve, Vegas, Nuke or Natron.** It has run only in a
-  command-line test host, on 8-bit and float pictures at full resolution; 16-bit and RGB-only
-  clips, reduced render scales and unpremultiplied alpha are handled but untried. The Windows
-  build has only been compiled, and the Linux build only loaded.
+- **The OpenFX build has never run in Vegas, Nuke or Natron**, and in Resolve only as a Fusion
+  tool, on macOS, at the default controls, where it matched the test host to within 1/255.
+  Otherwise it has run only in a command-line test host, on 8-bit and float pictures at full
+  resolution; 16-bit and RGB-only clips, reduced render scales and unpremultiplied alpha are
+  handled but untried there. The Windows build has only been compiled, and the Linux build only
+  loaded.
 
 ---
 
