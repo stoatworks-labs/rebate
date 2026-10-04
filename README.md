@@ -230,9 +230,9 @@ scan is opaque.
 
 ## Status
 
-**v0.2.0, and honestly early — 4 October 2026.** v0.2.0 adds the OpenFX build; the
-Resolume build renders as it did at v0.1.0. On main since, not yet released: the
-OpenFX build's **Encoding** control (sRGB / Linear).
+**v0.3.0, and honestly early — 4 October 2026.** v0.3.0 adds the OpenFX build's
+**Encoding** control (sRGB / Linear); v0.2.0, the same day, added the OpenFX build.
+The Resolume build renders as it did at v0.1.0.
 
 ### Measured offline, on macOS
 
@@ -290,7 +290,7 @@ JavaScript, and nothing checks a port but a reader.
 
 ### The OpenFX build
 
-Released at v0.2.0. Measured on the same machine on 2026-10-03:
+Released at v0.2.0; Encoding at v0.3.0. Measured on the same machine on 2026-10-03 and 04:
 
 | check | result |
 | --- | --- |

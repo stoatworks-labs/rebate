@@ -16,8 +16,8 @@ drawn.
 *The harness's test card through the plugin, rendered by the offline harness rather than
 captured from Resolume. Portrait 400 on a 35 mm strip, with a leak from the right.*
 
-> **Before you rely on this:** released at **v0.2.0**, which added the OpenFX build, and
-> honestly early. The film is measured rather than asserted, by a harness that drives the real
+> **Before you rely on this:** released at **v0.3.0**, which added the OpenFX build's Encoding
+> control (v0.2.0 added the OpenFX build), and honestly early. The film is measured rather than asserted, by a harness that drives the real
 > plugin class, at two
 > resolutions: a grey wedge's density climbs with slope 0.57948 for a stated γ of 0.58, inside a
 > band derived from the curve's own bends, and the toe and shoulder land 1.2e-3 log units from
