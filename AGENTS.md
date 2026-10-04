@@ -258,6 +258,21 @@ levels are primed on the first frame (and whenever Auto Levels is switched on), 
 there is no one-pole ramp from zero after a clip trigger; the level buffers are
 2 × 1 and are never reallocated on a resize.
 
+### Declare the output frame-varying, or Fusion repeats a generator's first frame
+
+`getClipPreferences` calls `setOutputFrameVarying( true )`. The grain changes with
+the frame's time. Without that declaration a host may treat the output as fixed
+while the inputs and parameters hold still. Measured 2026-10-04 in Resolve Studio
+21.1's Fusion page: every fleet generator rendered frames 20-22 byte-identical, none
+having declared it, and with the declaration they animate.
+
+A tool fed by a MediaIn is re-rendered every frame either way, so in Fusion this
+changes nothing visible; the declaration is still the correct one, and other hosts
+(Nuke, Natron) cache by it.
+
+The flag changes no pixels: `ofxprobe` renders byte-identical with and without it,
+on a moving sequence, on a still and under `--quirks fusion`.
+
 ---
 
 ## Would this hold on another rasteriser, at another raster?
