@@ -212,19 +212,21 @@ site is covered when a 24-bit hash falls under `uint( c × 2^24 )`, so it moves 
 site across its threshold now and then. `gather()` divides; the two are now
 byte-identical at fifteen settings.
 
-### ☠️ Fusion has no frame rate, and a missing property is a thrown exception
+### ☠️ Fusion's clips have no frame rate, and a missing property is a thrown exception
 
 Found by the lead in a real Resolve Studio 21.1 on the fleet's sibling ports
 (2026-10-03): as a Fusion tool the render job failed, "could not be processed
 successfully". Resolve's Fusion page reports `kOfxImageEffectPropFrameRate` on
-neither the effect nor any clip (and FrameRange as [0, 0]), the Support library's
-`getFrameRate()` throws `PropertyUnknownToHost`, and out of `render` that is
+the effect, at the timeline's rate, but on no clip, nor the clips' Unmapped rate
+and range (measured 2026-10-04); the Support library's `getFrameRate()` on a clip
+throws `PropertyUnknownToHost`, and out of `render` that is
 `kOfxStatErrMissingHostFeature`. Rebate's first OFX build read the source clip's
 rate, then the output's, unguarded, for the grain clock. Every host property the
 plugin reads (the frame rate, the clips' premultiplication) now goes through a
-helper that catches and falls back. It reads no frame range, no Unmapped pair and
-no render-status property. The test host's `--quirks fusion` reproduces it, and
-verify.sh runs it.
+helper that catches and falls back, so in Fusion the grain clock gets the effect's
+rate. It reads no frame range, no Unmapped pair and no render-status property. The
+test host's `--quirks fusion` is stricter than Fusion, withholding the effect's
+rate too, and verify.sh runs it.
 
 ### The minified edge print belongs to the driver
 
@@ -400,11 +402,12 @@ clean before and after.
     per output frame, for a control that is off by default.
   - **Grain's film frame from timeline time**, `floor( t / fps × 24 + 1e-6 )`, the
     FFGL formula with seconds = frames / the clip's frame rate.
-  - **Fusion reports no frame rate; there, time-based controls assume 24 fps.**
+  - **Fusion reports the frame rate on the effect but not on its clips.**
     `framesPerSecond` asks the output clip, the source clip and the effect, each in
-    its own try, and falls back to 24, Resolve's default timeline rate. Under the
-    fallback the grain advances one film frame per timeline frame, whatever the
-    composition's real rate. The plugin description says so.
+    its own try, so in Fusion the grain follows the effect's rate, the timeline's.
+    Only a host that reports none anywhere gets the fallback, 24, Resolve's default
+    timeline rate; under it the grain advances one film frame per timeline frame,
+    whatever the real rate. The plugin description says so.
   - **Grain cell × render scale**, so a proxy render point-samples the full render's
     grain. Everything else is already in film millimetres of the output's height.
   - **Premultiplied colour is the scene** (transparent is no light), as macroblock's
@@ -491,18 +494,19 @@ and 333×187 by hand.
   harness's 8-bit-matched CPU render (0.001–0.03%) shows. The control differs at
   39%. Frame 9 is byte-identical alone, after 0–8 and after out-of-order renders;
   float and 8-bit renders are byte-identical after rounding.
-- **Fusion's quirks** (2026-10-04): under the test host's `--quirks fusion` (no
-  FrameRate on the effect or any clip, FrameRange [0, 0], no Unmapped pair, no
-  render-status args) the 66c72b4 build fails with `kOfxStatErrMissingHostFeature`;
-  the guarded build renders, byte-identical to a 24 fps host at frame 50 with Grain
-  Amount 1 and unchanged when the host's unreported rate is 30. Frames 0 and 1 grain
-  differently under the quirk (one film frame per timeline frame) where a 25 fps
-  host grains them alike. Every normal-host result above is unchanged.
+- **The test host's Fusion quirk** (2026-10-04): under `--quirks fusion`, stricter
+  than Fusion (no FrameRate on the effect, where Fusion reports one, or on any clip;
+  FrameRange [0, 0]; no Unmapped pair; no render-status args), the 66c72b4 build
+  fails with `kOfxStatErrMissingHostFeature`; the guarded build renders,
+  byte-identical to a 24 fps host at frame 50 with Grain Amount 1 and unchanged
+  when the host's unreported rate is 30. Frames 0 and 1 grain differently under the
+  quirk (one film frame per timeline frame) where a 25 fps host grains them alike.
+  Every normal-host result above is unchanged.
 - **In a real Resolve** (2026-10-04, by the lead): Resolve Studio 21.1 on macOS, the
   bundle as a Fusion tool at the default controls. It renders, and six frames
   rendered out of Resolve match the test host's renders of the same frames at
-  24 fps (Fusion's fallback) in every pixel but one, off by 1/255. Only as a Fusion
-  tool, and only at the defaults.
+  24 fps in every pixel but one, off by 1/255. Only as a Fusion tool, and only at
+  the defaults.
 - **Cost**: `render::Apply` at 1920×1080, ~29–30 ms on 16 threads, ~250 ms on one;
   ~40 ms in ofxhost, which uses 8.
 - **The bundle** is universal, exports `OfxGetPlugin`, its plist names its binary,

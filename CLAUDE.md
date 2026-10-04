@@ -74,9 +74,10 @@ scanner.
   params and time. Auto Levels measures each frame alone (no smoothing); the grain's
   film frame is `floor( t / fps × 24 )`. Normalise 8-bit input by dividing, never by a
   reciprocal: the GPU's c / 255 is an ULP from c × (1/255), enough to flip a grain site.
-- **Every host property read is guarded.** Resolve's Fusion page reports no frame rate,
-  and the Support library THROWS on a missing property: `framesPerSecond` tries the
-  output clip, the source clip, the effect, then falls back to 24.
+- **Every host property read is guarded.** Resolve's Fusion page reports the frame rate
+  on the effect but not on its clips, and the Support library THROWS on a missing
+  property: `framesPerSecond` tries the output clip, the source clip, the effect, then
+  falls back to 24.
 - **The harness never re-types the model.** It takes constants from `Model.h`
   (γ, toe, latitude, N) and measures everything else out of the picture. `Coverage`
   in `Model.cpp` exists for the harness to *choose* inputs with, never to predict.

@@ -55,11 +55,12 @@
 #                 universal, it ad-hoc signs, and ofxprobe loads it as
 #                 com.stoatworks.rebate and renders a frame that is not its
 #                 input.
-#   fusion        Resolve's Fusion page reports no frame rate anywhere, and the
-#                 OFX Support library THROWS on a missing property: a test host
-#                 with `--quirks fusion` must get a render, and the same frame
-#                 as a 24 fps host. Needs that host (OFXHOST=...); skips
-#                 cleanly without it.
+#   fusion        Resolve's Fusion page reports no frame rate on its clips
+#                 (only on the effect), and the OFX Support library THROWS on
+#                 a missing property: a test host with `--quirks fusion`,
+#                 which withholds the effect's rate too, must get a render,
+#                 and the same frame as a 24 fps host. Needs that host
+#                 (OFXHOST=...); skips cleanly without it.
 #
 set -uo pipefail
 
@@ -376,15 +377,16 @@ if [ "$(uname)" = "Darwin" ]; then
 		fi
 
 		#-------------------------------------------------------------------
-		# Resolve's Fusion page reports no kOfxImageEffectPropFrameRate on the
-		# effect or any clip; the Support library's getFrameRate() throws, and
-		# a throw out of render fails the comp. The fleet's extended test host
-		# imitates that with --quirks fusion. It is not in a repo yet: point
+		# Resolve's Fusion page reports kOfxImageEffectPropFrameRate on the
+		# effect but on no clip; a clip's getFrameRate() throws in the Support
+		# library, and a throw out of render fails the comp. The fleet's
+		# extended test host has --quirks fusion, stricter than Fusion: it
+		# withholds the effect's rate too. It is not in a repo yet: point
 		# OFXHOST at it, or this skips. Under the quirk the grain clock must
 		# fall back to 24 fps: the frame must equal a 24 fps host's, and must
 		# not move when the host's (unreported) rate does.
 		#-------------------------------------------------------------------
-		step "openfx under Fusion's quirks"
+		step "openfx under --quirks fusion"
 		QUIRKHOST="${OFXHOST:-$OFXPROBE}"
 		help=$("$QUIRKHOST" --help 2>&1)
 		case "$help" in

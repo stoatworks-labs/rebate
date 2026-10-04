@@ -35,15 +35,16 @@
 /// number over the clip's frame rate, so a frame grains the same way however
 /// and whenever it is rendered.
 ///
-/// **Not every host has a frame rate.** Resolve's Fusion page reports none --
-/// not on the effect, not on any clip -- and the Support library's getters
-/// THROW on a missing property, which out of `render` is a failed render and,
-/// in Fusion, a composition that "could not be processed". `framesPerSecond`
-/// asks the output clip, the source clip and the effect, each read in its own
-/// try, and falls back to 24, Resolve's default timeline rate. Under the
-/// fallback the grain advances one film frame per timeline frame. The only
-/// other host property read here, the clips' premultiplication, is guarded
-/// the same way.
+/// **Not every host puts a frame rate on its clips.** Resolve's Fusion page
+/// reports one on the effect but on no clip, and the Support library's
+/// getters THROW on a missing property, which out of `render` is a failed
+/// render and, in Fusion, a composition that "could not be processed".
+/// `framesPerSecond` asks the output clip, the source clip and the effect,
+/// each read in its own try, so in Fusion it gets the effect's rate, the
+/// timeline's. Only a host that reports none anywhere gets the fallback, 24,
+/// Resolve's default timeline rate; under it the grain advances one film
+/// frame per timeline frame. The only other host property read here, the
+/// clips' premultiplication, is guarded the same way.
 ///
 /// **No audio, no beat sync, no event buttons** -- the FFGL build has none to
 /// drop. The About block is OFX's own: a folded group with real buttons.
@@ -93,8 +94,9 @@ constexpr const char* kPluginDescription =
 	"previous frame to smooth the scanner's levels against -- the Resolume "
 	"build settles them over a quarter of a second. Grain changes 24 times a "
 	"second of timeline time.\n\n"
-	"Fusion reports no frame rate; there, time-based controls assume 24 fps, "
-	"so the grain changes once per frame.\n\n"
+	"Resolve's Fusion page reports the frame rate on the effect but not on its "
+	"clips; the plugin reads the effect's, and assumes 24 fps only where a "
+	"host reports none.\n\n"
 	"https://stoatworks-labs.com";
 
 // Script names. Permanent: saved projects refer to them.
@@ -124,7 +126,7 @@ constexpr const char* kParamMix          = "mix";
 using namespace rebate;
 
 /// The frame rate when the host gives none: Resolve's default timeline rate.
-/// Fusion, inside Resolve, reports no frame rate anywhere.
+/// Fusion, inside Resolve, reports one on the effect, though not on its clips.
 constexpr double kFallbackFrameRate = 24.0;
 
 /// The first positive, finite frame rate the host will give -- the output
@@ -381,7 +383,7 @@ public:
 			return;
 
 		//OFX time is FRAMES. Seconds come from the frame rate, which Fusion
-		//does not report at all: see framesPerSecond.
+		//reports on the effect but not on its clips: see framesPerSecond.
 		const double fps = framesPerSecond( *this, dstClip, srcClip );
 
 		render::Uniforms u = render::Prepare( valuesAt( args.time ), width, height, args.time / fps );
