@@ -46,6 +46,15 @@
 /// frame per timeline frame. The only other host property read here, the
 /// clips' premultiplication, is guarded the same way.
 ///
+/// **The clip may be linear light.** Resolume hands an effect display-encoded
+/// picture and the FFGL build decodes it; an OFX host may hand over linear
+/// light -- Nuke and Natron work in it, and Resolve hands over whatever the
+/// picture has been converted to. Encoding (sRGB / Linear), OpenFX only and
+/// after every FFGL control, says which. Linear skips the film's decode and
+/// the scan's encode (`render::Uniforms::linearClip`): the same film, given
+/// the same light, handing back linear light, with Mix blending the clip's
+/// own values.
+///
 /// **No audio, no beat sync, no event buttons** -- the FFGL build has none to
 /// drop. The About block is OFX's own: a folded group with real buttons.
 ///
@@ -86,9 +95,11 @@ constexpr const char* kPluginDescription =
 	"What falls out: the orange negative, mid-tone grain, blue shadows on "
 	"expired stock, warm light leaks, cross-processing, and the rebate with its "
 	"sprocket holes and edge print.\n\n"
-	"The input is taken as display-encoded (sRGB / Rec.709-style) picture and "
-	"the output is encoded the same way. Float input is used as it is, values "
-	"above 1 included.\n\n"
+	"Encoding says what the clip is: sRGB (the default) takes display-encoded "
+	"(sRGB / Rec.709-style) picture, as Resolume does; Linear takes linear "
+	"light, as Nuke and Natron work, or a picture converted to linear in "
+	"Resolve. The output is encoded the same way as the input. Float input is "
+	"used as it is, values above 1 included.\n\n"
 	"Differences from the Resolume build: Auto Levels measures every frame on "
 	"its own, because OpenFX renders frames in any order and there is no "
 	"previous frame to smooth the scanner's levels against -- the Resolume "
@@ -122,6 +133,16 @@ constexpr const char* kParamFormat       = "format";
 constexpr const char* kParamEdgeText     = "edgeText";
 constexpr const char* kParamFrameNumber  = "frameNumber";
 constexpr const char* kParamMix          = "mix";
+constexpr const char* kParamEncoding     = "encoding";//OpenFX only
+
+/// Encoding's options, in order. sRGB first: the default, and what every
+/// project saved before the control existed renders as.
+enum Encoding
+{
+	kEncodingSrgb   = 0,
+	kEncodingLinear = 1,
+	kEncodingCount  = 2,
+};
 
 using namespace rebate;
 
@@ -189,6 +210,11 @@ bool isPremultiplied( const OFX::Clip* clip, OFX::PixelComponentEnum components 
 const char* stockName( int index )
 {
 	return model::StockAt( index ).name;
+}
+
+const char* encodingName( int index )
+{
+	return index == kEncodingLinear ? "Linear" : "sRGB";
 }
 
 //---------------------------------------------------------------------------
@@ -335,6 +361,7 @@ public:
 		edgeText     = fetchBooleanParam( kParamEdgeText );
 		frameNumber  = fetchIntParam( kParamFrameNumber );
 		mix          = fetchDoubleParam( kParamMix );
+		encoding     = fetchChoiceParam( kParamEncoding );
 	}
 
 	/// The grain changes with the frame's time. Unless a plugin says so, a host
@@ -394,6 +421,11 @@ public:
 		//reduced render point-samples the full one's grain.
 		if( args.renderScale.x > 0.0 && args.renderScale.x < 1.0 )
 			u.grainCell = static_cast< float >( u.grainCell * args.renderScale.x );
+
+		//Not a HostValues member: the FFGL build has no such control.
+		int clipEncoding = kEncodingSrgb;
+		encoding->getValueAtTime( args.time, clipEncoding );
+		u.linearClip = clipEncoding == kEncodingLinear;
 
 		const bool srcPremultiplied = isPremultiplied( srcClip, srcComps );
 		const bool premultiplied    = isPremultiplied( dstClip, comps );
@@ -518,6 +550,7 @@ private:
 	OFX::BooleanParam* edgeText    = nullptr;
 	OFX::IntParam* frameNumber     = nullptr;
 	OFX::DoubleParam* mix          = nullptr;
+	OFX::ChoiceParam* encoding     = nullptr;
 };
 
 //---------------------------------------------------------------------------
@@ -721,6 +754,16 @@ void RebatePluginFactory::describeInContext( OFX::ImageEffectDescriptor& desc, O
 	defineInteger( desc, page, frameGroup, kParamFrameNumber, "Frame Number",
 	               "The number the 35 mm edge print gives this frame. Roll film has none.", 0, 99, d.frameNumber );
 	defineSlider( desc, page, frameGroup, kParamMix, "Mix", "Wet/dry against the untouched input.", d.mix );
+
+	//----------------------------------------------------------------- Colour
+	// OpenFX only, and after everything the FFGL build has.
+	OFX::GroupParamDescriptor* colourGroup = defineGroup( desc, page, "colourGroup", "Colour" );
+	defineChoice( desc, page, colourGroup, kParamEncoding, "Encoding",
+	              "What the clip is, and so what the output is. sRGB: display-encoded picture (sRGB / Rec.709-style), "
+	              "as Resolume hands it over. Linear: linear light, as Nuke and Natron work, or a picture converted to "
+	              "linear in Resolve; mid grey near 0.18. The curve only: the channels go to the film's layers as they "
+	              "are either way.",
+	              kEncodingCount, encodingName, static_cast< float >( kEncodingSrgb ) );
 
 	// The Stoatworks About block: a read-only credit line and one push button per
 	// link, in a group that starts folded. Last, so it sits under the effect's

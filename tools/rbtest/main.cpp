@@ -2176,6 +2176,199 @@ int runCpu( int width, int height, bool quiet = false )
 }
 
 //---------------------------------------------------------------------------
+// --linear
+//
+// The OpenFX build's Encoding: Linear, which has no GLSL for --cpu to hold
+// it to. Linear skips the film's sRGB decode and the scan's encode and
+// changes nothing between them. So one frame twice through render::Apply --
+// the clip as the sRGB path takes it, and the same clip turned into light by
+// the film's own decode (render::DecodeSrgb) for the Linear path -- gives the
+// film the same light, and the outputs must differ by the scan's encode and
+// nothing else:
+//
+//   exact      Format Full, where the film reads each texel as it is: every
+//              channel of every pixel, EncodeSrgb( linear ) == sRGB, BIT FOR
+//              BIT. Both Views, both scans, every Process, a leak, full grain,
+//              and the float wedge's encoded values to 4.6 -- light to about
+//              35, which a linear clip carries routinely.
+//   mix        below 1, Linear blends the clip's own values: the output is
+//              in (1 - m) + scan m, the scan from the same frame at Mix 1,
+//              to within 1e-6.
+//   film       35 mm and 6x6 reduce the scene into the gate through bilinear
+//              taps, which average encoded values on one path and light on
+//              the other: a real difference, at the scene's edges. A flat
+//              field has none, so on one, grain off (a site flips on a c an
+//              ULP away), every pixel -- picture, border, edge print, holes --
+//              agrees to within 1e-5, and wherever the sRGB path is exactly 0
+//              (the holes) Linear is exactly 0 too.
+//
+// The control renders the linear clip with the switch off -- the film
+// decoding light as if it were picture, which an unwired control would do --
+// and it must fail.
+//---------------------------------------------------------------------------
+std::vector< float > decodedClip( std::vector< float > image )
+{
+	for( size_t i = 0; i < image.size(); i += 4 )
+		for( size_t c = 0; c < 3; ++c )
+			image[ i + c ] = render::DecodeSrgb( image[ i + c ] );
+	return image;
+}
+
+/// One frame through render::Apply as the OpenFX build renders it (float
+/// filter weights). `clip` and `out` are top-down.
+bool renderClip( int width, int height, const Settings& settings, int frame, const std::vector< float >& clip,
+                 bool linearClip, std::vector< float >& out )
+{
+	render::Uniforms u;
+	if( !uniformsFor( width, height, settings, frame, u ) )
+		return false;
+	u.linearClip               = linearClip;
+	std::vector< float > image = flipRows( clip, width, height );
+	render::Apply( u, image.data(), image.data(), threadedRows );
+	out = flipRows( image, width, height );
+	return true;
+}
+
+struct EncodeReading
+{
+	size_t channels = 0;
+	size_t unequal  = 0;  ///< channels where EncodeSrgb( linear ) != sRGB (alpha: linear != sRGB)
+	double worst    = 0.0;///< the largest such difference
+	size_t zeros    = 0;  ///< channels exactly 0 on the sRGB path
+	size_t lostZero = 0;  ///< ... that are not exactly 0 on the Linear path
+};
+
+EncodeReading encodeAgreement( const std::vector< float >& linear, const std::vector< float >& srgb, double tolerance )
+{
+	EncodeReading r;
+	for( size_t i = 0; i < srgb.size(); ++i )
+	{
+		const bool alpha    = i % 4 == 3;
+		const float encoded = alpha ? linear[ i ] : render::EncodeSrgb( linear[ i ] );
+		const double e      = std::fabs( static_cast< double >( encoded ) - static_cast< double >( srgb[ i ] ) );
+		++r.channels;
+		r.worst = std::max( r.worst, e );
+		r.unequal += e > tolerance ? 1 : 0;
+		if( !alpha && srgb[ i ] == 0.0f )
+		{
+			++r.zeros;
+			r.lostZero += linear[ i ] != 0.0f ? 1 : 0;
+		}
+	}
+	return r;
+}
+
+int runLinear( int width, int height, bool quiet = false )
+{
+	constexpr int kFrame = 7;
+	int failures         = 0;
+
+	struct Case
+	{
+		const char* name;
+		Settings settings;
+		bool hdr = false;
+	};
+	const Case exact[] = {
+		{ "card, Full", { { "Format", 0.0f } } },
+		{ "card, Full, View Negative", { { "Format", 0.0f }, { "View", 1.0f } } },
+		{ "card, Full, Auto Levels", { { "Format", 0.0f }, { "Auto Levels", 1.0f } } },
+		{ "card, Full, Cross, Grain 800 at 1", { { "Format", 0.0f }, { "Process", 2.0f }, { "Stock", 2.0f }, { "Grain Amount", 1.0f } } },
+		{ "card, Full, Slide 100 in E-6", { { "Format", 0.0f }, { "Process", 1.0f }, { "Stock", 3.0f } } },
+		{ "card, Full, leak top", { { "Format", 0.0f }, { "Leak Amount", 0.6f }, { "Leak Edge", 2.0f } } },
+		{ "float wedge to 4.6, Full", { { "Format", 0.0f }, { "White Point", 0.75f } }, true },
+	};
+	for( const Case& c : exact )
+	{
+		const std::vector< float > clip = floatSource( width, height, kFrame, c.hdr );
+		std::vector< float > srgb, linear;
+		if( !renderClip( width, height, c.settings, kFrame, clip, false, srgb )
+		    || !renderClip( width, height, c.settings, kFrame, decodedClip( clip ), true, linear ) )
+			return 1;
+		const EncodeReading r = encodeAgreement( linear, srgb, 0.0 );
+		const bool ok         = r.unequal == 0 && r.lostZero == 0;
+		if( !quiet )
+			std::printf( "linear %-36s %zu of %zu channels differ after the encode (worst %.3g)  %s\n", c.name, r.unequal,
+			             r.channels, r.worst, verdict( ok ) );
+		failures += !ok;
+	}
+
+	//Mix: the clip's own values, blended with the scan.
+	{
+		const Settings full  = { { "Format", 0.0f } };
+		const Settings mixed = { { "Format", 0.0f }, { "Mix", 0.5f } };
+		const std::vector< float > clip = decodedClip( floatSource( width, height, kFrame, true ) );
+		std::vector< float > scan, out;
+		if( !renderClip( width, height, full, kFrame, clip, true, scan ) || !renderClip( width, height, mixed, kFrame, clip, true, out ) )
+			return 1;
+		size_t unequal = 0;
+		double worst   = 0.0;
+		for( size_t i = 0; i < out.size(); ++i )
+		{
+			const double want = static_cast< double >( clip[ i ] ) * 0.5 + static_cast< double >( scan[ i ] ) * 0.5;
+			const double e    = std::fabs( static_cast< double >( out[ i ] ) - want );
+			worst             = std::max( worst, e );
+			unequal += e > 1e-6 * std::max( 1.0, std::fabs( want ) ) ? 1 : 0;
+		}
+		const bool ok = unequal == 0;
+		if( !quiet )
+			std::printf( "linear %-36s %zu of %zu channels off in (1 - m) + scan m (worst %.3g)  %s\n", "float wedge, Full, Mix 0.5",
+			             unequal, out.size(), worst, verdict( ok ) );
+		failures += !ok;
+	}
+
+	//The film formats, on a flat mid grey with no grain.
+	const Case film[] = {
+		{ "flat grey, 35 mm", { { "Grain Amount", 0.0f } } },
+		{ "flat grey, 6x6", { { "Format", 1.0f }, { "Grain Amount", 0.0f } } },
+		{ "flat grey, 35 mm, View Negative", { { "View", 1.0f }, { "Grain Amount", 0.0f } } },
+	};
+	for( const Case& c : film )
+	{
+		const std::vector< float > clip = buildFlatLog( width, height, model::MidGreyLog() );
+		std::vector< float > srgb, linear;
+		if( !renderClip( width, height, c.settings, kFrame, clip, false, srgb )
+		    || !renderClip( width, height, c.settings, kFrame, decodedClip( clip ), true, linear ) )
+			return 1;
+		const EncodeReading r = encodeAgreement( linear, srgb, 1e-5 );
+		const bool ok         = r.unequal == 0 && r.lostZero == 0;
+		if( !quiet )
+			std::printf( "linear %-36s %zu of %zu channels beyond 1e-5 (worst %.3g); %zu of %zu exact zeros lost  %s\n", c.name,
+			             r.unequal, r.channels, r.worst, r.lostZero, r.zeros, verdict( ok ) );
+		failures += !ok;
+	}
+
+	//The control: a linear clip with the switch off.
+	{
+		const Settings full             = { { "Format", 0.0f } };
+		const std::vector< float > clip = floatSource( width, height, kFrame, false );
+		std::vector< float > srgb, ignored;
+		if( !renderClip( width, height, full, kFrame, clip, false, srgb )
+		    || !renderClip( width, height, full, kFrame, decodedClip( clip ), false, ignored ) )
+			return 1;
+		//The switch off hands back sRGB already: compare it as the Linear path's
+		//output would be compared, encode and all, and as it is.
+		const EncodeReading asLinear = encodeAgreement( ignored, srgb, 1e-5 );
+		size_t asIs                  = 0;
+		for( size_t i = 0; i < srgb.size(); ++i )
+			asIs += std::fabs( ignored[ i ] - srgb[ i ] ) > 1e-5f ? 1 : 0;
+		const bool caught = asLinear.unequal > 0 && asIs > 0;
+		if( !quiet )
+		{
+			std::printf( "linear control: the linear card with the switch off\n" );
+			std::printf( "  %zu of %zu channels differ as Linear output, %zu as sRGB output -- %s\n", asLinear.unequal,
+			             asLinear.channels, asIs, caught ? "it failed, as it must" : "it PASSED -- the check cannot see an unwired switch" );
+		}
+		failures += !caught;
+	}
+
+	if( !quiet )
+		std::printf( "%s\n", failures == 0 ? "linear: Encoding Linear is the sRGB path without its decode and encode"
+		                                   : "linear: FAILURES" );
+	return failures;
+}
+
+//---------------------------------------------------------------------------
 // --bench-cpu: the OpenFX build's render, without a host.
 //---------------------------------------------------------------------------
 int runBenchCpu( int width, int height, int frames )
@@ -2447,6 +2640,7 @@ void usage()
 		"  --resize            the scanner's levels survive a resize\n"
 		"  --negative          every check above can fail\n"
 		"  --cpu               the OpenFX build's CPU passes agree with the shaders, on the card\n"
+		"  --linear            the OpenFX build's Encoding: Linear is the sRGB path without its decode and encode\n"
 		"  --bench-cpu         time the OpenFX build's CPU render (render::Apply) at --size\n"
 		"  --perturb BITS      run the checks against a perturbed model (Model.h), verbosely\n"
 		"  --bench             time ProcessOpenGL at 720p through 4K\n"
@@ -2532,7 +2726,7 @@ int main( int argc, char** argv )
 			wantPipe = true;
 		else if( argument == "--curve" || argument == "--mask" || argument == "--grain" || argument == "--push"
 		         || argument == "--leak" || argument == "--cross" || argument == "--rebate" || argument == "--seed"
-		         || argument == "--resize" || argument == "--negative" || argument == "--cpu" )
+		         || argument == "--resize" || argument == "--negative" || argument == "--cpu" || argument == "--linear" )
 			checks.push_back( argument );
 		else if( argument == "--bench-cpu" )
 			wantBenchCpu = true;
@@ -2621,6 +2815,8 @@ int main( int argc, char** argv )
 				result = runNegative( width, height );
 			else if( check == "--cpu" )
 				result = runCpu( width, height );
+			else if( check == "--linear" )
+				result = runLinear( width, height );
 			failures += result;
 			std::printf( "\n" );
 		}

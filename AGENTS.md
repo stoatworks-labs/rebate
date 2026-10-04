@@ -96,7 +96,7 @@ The pipeline, in order:
 | `source/Model.{h,cpp}` | The film as numbers: curve constants, base, impurities, crossover, ageing, the five stocks, `Develop()` (stock × process × push → curve), `ScannerProfile()`, the `Perturb` hook bits. `Coverage`/`Dye` in double, for the harness to choose inputs with. |
 | `source/Controls.{h,cpp}` | What a 0..1 slider means, with inverses. Neutral positions land exactly in binary. |
 | `source/Frame.{h,cpp}` | Film geometry in millimetres (gate, perforations, print bands, the centre crop) and the edge-print bitmap. |
-| `source/Render.{h,cpp}` | No GL. `HostValues` (every control as the FFGL host holds it; its member defaults ARE the plugin's defaults, both builds) and `Prepare()` (the per-frame arithmetic: stock, curve, profile, speed and age fog, the leak's spectrum, the grain's film frame), which both builds call; and `Film`/`MeasureLevels`/`Scan`, the CPU mirror of the film, blocks + levels and scan shaders for the OpenFX build. Every mirrored function says `//= mirrored` and names its GLSL; `Shaders.cpp` names this file beside each pass. |
+| `source/Render.{h,cpp}` | No GL. `HostValues` (every control as the FFGL host holds it; its member defaults ARE the plugin's defaults, both builds) and `Prepare()` (the per-frame arithmetic: stock, curve, profile, speed and age fog, the leak's spectrum, the grain's film frame), which both builds call; and `Film`/`MeasureLevels`/`Scan`, the CPU mirror of the film, blocks + levels and scan shaders for the OpenFX build. Every mirrored function says `//= mirrored` and names its GLSL; `Shaders.cpp` names this file beside each pass. One branch has no GLSL: `Uniforms::linearClip`, the OpenFX build's Encoding: Linear. |
 | `source/ofx/RebateOFX.cpp` | The OpenFX plugin: describe, parameters, marshalling OFX pixels to float and back, `render::Apply` across the host's threads. No per-pixel arithmetic of its own. |
 | `source/ofx/StoatworksAboutOFX.h`, `external/openfx/` | Generated About block for OFX (sync-about.py writes it); the fleet's vendored OFX SDK subset (BSD-3). |
 | `source/Font.{h,cpp}` | graticule's 5x7 font, unchanged. |
@@ -104,7 +104,7 @@ The pipeline, in order:
 | `source/PassBuffer.*` | tinsel's FFGLFBO with the leak fixed. |
 | `source/Rebate.{h,cpp}` | The plugin: parameters, the clock, buffers, the passes. |
 | `source/Diag.{h,cpp}` | A log file, for the shader that will not compile. |
-| `tools/rbtest/` | The offline harness: renders, measures, benchmarks, pipes, dumps shaders; `--cpu` compares the OpenFX build's CPU passes with the shaders, `--pipe --engine cpu` runs footage through them, `--bench-cpu` times them. |
+| `tools/rbtest/` | The offline harness: renders, measures, benchmarks, pipes, dumps shaders; `--cpu` compares the OpenFX build's CPU passes with the shaders, `--linear` holds their one unmirrored branch (Encoding: Linear) to the sRGB path, `--pipe --engine cpu` runs footage through them, `--bench-cpu` times them. |
 | `tools/sweep.py` | No control is silently dead. |
 | `tools/verify.sh` | All of it, at two rasters, plus the release-time checks done locally. |
 | `demo/` | The browser demo. `plugin.js` holds a copy of every shader piece and of the glyph table, and a PORT of Model, Controls, Frame and the per-frame arithmetic; `vendor/` is the shared kit and is not edited here. |
@@ -417,9 +417,20 @@ clean before and after.
     `grainSeed`…); groups are `<label>Group` (`processGroup`), never the label,
     because the group "Process" and the choice `process` would otherwise differ by
     case alone.
-  - **No colour-space option.** The input is display-encoded, as in Resolume. A
-    scene-linear input switch would be a control in one build only; it is an open
-    question instead.
+  - **Encoding (sRGB / Linear), OpenFX only** (2026-10-04, at Allan's request,
+    closing the open question). Resolume only ever hands over display-encoded
+    picture, so the FFGL build has no such control and the inspectors now differ by
+    one group, Colour, after Frame. Linear skips the film's decode and the scan's
+    encode inside the CPU passes (`render::Uniforms::linearClip`) rather than
+    converting around them in the marshalling: white stays exactly 1 and holes
+    exactly 0, Linear is cheaper than sRGB, Mix blends the clip's own (linear)
+    values, and the film formats' gate reduction averages light. The price is one
+    branch the GLSL lacks, so `--cpu` cannot see it; `--linear` holds it to the
+    sRGB path instead. The scan's linear output is clamped to 0..1 exactly as the
+    encode clamps it, so the two paths differ by the encode and nothing else. It
+    changes the transfer curve, not the primaries. Script name `encoding`, options
+    in that order, sRGB the default, so every project saved before it renders as
+    it did.
 - **The browser demo** (2026-09-24): the whole CPU half is ported rather than a
   subset, because every number the shaders get comes from it; the integer controls
   are full dropdowns; the page's presets are the user guide's walk and labelled as
@@ -507,6 +518,20 @@ and 333×187 by hand.
   rendered out of Resolve match the test host's renders of the same frames at
   24 fps in every pixel but one, off by 1/255. Only as a Fusion tool, and only at
   the defaults.
+- **Encoding: Linear** (2026-10-04). `rbtest --linear` at 320×180 and 1280×720:
+  the same frame as an sRGB clip and as that clip decoded to light by the film's
+  own decode. In Full, at seven settings (both Views, both scans, every Process, a
+  leak, Grain Amount 1, a float wedge reaching ~35 in light), the Linear output
+  re-encoded is bit-identical to the sRGB output in every channel; Mix 0.5 is the
+  clip blended with the scan to one ULP; 35 mm and 6x6 on a flat grey with no grain
+  are bit-identical too (allowed 1e-5), holes exactly 0 on both. The control (the
+  linear clip with the switch off) differs in 73% of channels. `verify.sh` sets
+  `encoding` through ofxprobe: Linear's mean is 40.1 against sRGB's 46.4 on a
+  black-and-white card, as an unencoded output must be. **In Resolve Studio 21.1**,
+  as a Fusion tool at Full with no grain on a 640×360 card: Rebate at sRGB against
+  Custom Tools converting to linear (the sRGB formula; Fusion's `pow()` renders
+  black there, `^` works), Rebate at Linear and back: 230,395 of 230,400 pixels
+  identical, five off by 1/255. Linear on the unconverted clip differs at 98%.
 - **Cost**: `render::Apply` at 1920×1080, ~29–30 ms on 16 threads, ~250 ms on one;
   ~40 ms in ofxhost, which uses 8.
 - **The bundle** is universal, exports `OfxGetPlugin`, its plist names its binary,
@@ -536,8 +561,10 @@ and 333×187 by hand.
   sweep; at reductions over 2× it would alias. The formats reduce by at most ~1.6×.
 - **E-6 through a manual scan** uses the same Black/White Point controls, which are
   scaled for a negative's density range; Auto Levels suits E-6 better.
-- ☠️ **The OpenFX build has been in one real OFX host, once**: Resolve Studio 21.1
-  on macOS, as a Fusion tool at the defaults (above). Never Vegas, Nuke or Natron.
+- ☠️ **The OpenFX build has been in one real OFX host**: Resolve Studio 21.1 on
+  macOS, as a Fusion tool, at the defaults and for Encoding (above). Never Vegas,
+  Nuke or Natron, never Resolve's Color page, and Linear never in a host whose
+  working space is linear by itself.
   Otherwise ofxhost is all it has met: it renders at scale 1, never tiles, hands
   over 8-bit or float RGBA, premultiplied; 16-bit, RGB-only and unpremultiplied
   clips and reduced render scales are handled in the code and unexercised there
@@ -623,10 +650,6 @@ with `cf-run npx wrangler deploy` and verify by content either way. Rebate is on
 - **The spec's cyan/yellow wording** — see the decision above.
 - **Neighbouring frames on the strip** are unexposed; showing the previous and next
   frame (the same clip, a frame apart) would look more like a contact strip.
-- **A scene-linear input for the OpenFX build?** Resolve's colour-managed and ACES
-  timelines hand a plugin linear light; Rebate decodes sRGB itself. A Linear/sRGB
-  input choice would serve colourists, but it is a control the FFGL build would not
-  have.
 
 ---
 

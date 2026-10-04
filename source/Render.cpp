@@ -439,6 +439,14 @@ float encodeSrgb( float x )
 	return x <= 0.0031308f ? 12.92f * x : 1.055f * std::pow( x, 1.0f / 2.4f ) - 0.055f;
 }
 
+/// What the scan hands back. Not mirrored: the GLSL always encodes. For a
+/// linear OpenFX clip, the linear value, clamped as the encode clamps it, so
+/// that the two outputs differ by the encode and nothing else.
+float encodeOutput( float x, bool linearClip )
+{
+	return linearClip ? std::clamp( x, 0.0f, 1.0f ) : encodeSrgb( x );
+}
+
 void serial( int rows, const std::function< void( int, int ) >& body )
 {
 	body( 0, rows );
@@ -541,7 +549,9 @@ void Film( const Uniforms& u, const float* picture, const TextMips& text, float*
 				latent = std::max( edgePrint( f, text, fx, fy, f.bandA, 0.0f ), edgePrint( f, text, fx, fy, f.bandB, 7.0f ) );
 			}
 
-			const vec3 decoded{ decodeSrgb( scene.x ), decodeSrgb( scene.y ), decodeSrgb( scene.z ) };
+			//Not mirrored: a linear OpenFX clip is light already. The GLSL
+			//always decodes, because Resolume's input is always encoded.
+			const vec3 decoded = u.linearClip ? scene : vec3{ decodeSrgb( scene.x ), decodeSrgb( scene.y ), decodeSrgb( scene.z ) };
 			vec3 light;
 			for( int r = 0; r < 3; ++r )
 				light[ r ] = f.crossover[ r ][ 0 ] * decoded[ 0 ] + f.crossover[ r ][ 1 ] * decoded[ 1 ] + f.crossover[ r ][ 2 ] * decoded[ 2 ];
@@ -708,7 +718,8 @@ void Scan( const Uniforms& u, const float* film, const Levels& levels, const flo
 					linear[ k ] = expand( p[ k ], span[ k ] / s.profileGamma * s.scanGamma );
 			}
 
-			const float scanned[ 4 ] = { encodeSrgb( linear.x ), encodeSrgb( linear.y ), encodeSrgb( linear.z ), 1.0f };
+			const float scanned[ 4 ] = { encodeOutput( linear.x, u.linearClip ), encodeOutput( linear.y, u.linearClip ),
+			                             encodeOutput( linear.z, u.linearClip ), 1.0f };
 			float* o                 = out + at;
 			if( s.mixAmount >= 1.0f )
 			{
@@ -738,6 +749,16 @@ void Apply( const Uniforms& u, const float* input, float* output, const Parallel
 	const Levels levels = u.autoActive ? MeasureLevels( u, film.data() ) : Levels{};
 
 	run( u.height, [ & ]( int y0, int y1 ) { Scan( u, film.data(), levels, input, output, y0, y1 ); } );
+}
+
+float DecodeSrgb( float v )
+{
+	return decodeSrgb( v );
+}
+
+float EncodeSrgb( float x )
+{
+	return encodeSrgb( x );
 }
 
 } // namespace rebate::render

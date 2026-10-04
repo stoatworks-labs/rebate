@@ -35,6 +35,11 @@
 	file. **Edit both.** `rbtest --cpu` renders the same frames through both
 	and fails when they part.
 
+	One branch has no GLSL: `Uniforms::linearClip`, the OpenFX build's
+	Encoding: Linear, which skips the film's sRGB decode and the scan's
+	encode. With it clear -- always, in the FFGL build -- the copy is line for
+	line. `rbtest --linear` holds the branch to the sRGB path.
+
 	The CPU cannot be the GPU bit for bit, in two known places:
 
 	  - **Texture filtering.** Bilinear here is exact float; a GPU's filter
@@ -164,6 +169,13 @@ struct Uniforms
 	int frameNumber = 0;
 	float mix       = 1.0f;
 
+	/// OpenFX only (Encoding: Linear): the clip is linear light, not
+	/// display-encoded, so the film takes it as it is and the scan hands back
+	/// linear light. Resolume's input is always display-encoded, so the FFGL
+	/// build never sets it and the GLSL has no such branch; `rbtest --linear`
+	/// checks it against the sRGB path instead.
+	bool linearClip = false;
+
 	frame::Geometry geometry;
 	int gridW = 1;
 	int gridH = 1;
@@ -229,5 +241,10 @@ using Parallel = std::function< void( int rows, const std::function< void( int, 
 /// Every pass in order, the whole frame. `input` and `output` are width x
 /// height RGBA float, bottom-up, and may be the same buffer.
 void Apply( const Uniforms& u, const float* input, float* output, const Parallel& parallel );
+
+/// The film's sRGB decode and the scan's encode, exactly as the passes run
+/// them, for the harness to build a linear clip and read one back with.
+float DecodeSrgb( float v );
+float EncodeSrgb( float x );
 
 } // namespace rebate::render

@@ -144,6 +144,7 @@ the clips are Resolume's bundled demo media.*
 | **Leak** | Leak Amount, Leak Edge (Left, Right, Top, Bottom), Leak Warmth, Leak Spread. |
 | **Scan** | View (Positive or Negative), Auto Levels, Black Point, White Point (densities above the base), Scanner Gamma. |
 | **Frame** | Format (Full, 6x6, 35 mm), Edge Text On, Frame Number, Mix. |
+| **Colour** | OpenFX only: Encoding (sRGB or Linear), what the clip is and so what the output is. |
 
 The defaults are the Portrait 400, normally exposed and developed, grain at about
 a third of its physical fluctuation, scanned **manually** with the lab's C-41
@@ -177,11 +178,18 @@ Linux    /usr/OFX/Plugins/
 The macOS build is universal; the Linux build is x86_64 against glibc 2.28, so it
 loads on Rocky 8, the oldest Linux Resolve supports.
 
-**Colour.** Like the Resolume build, Rebate takes its input as display-encoded
-picture (sRGB / Rec.709-style), decodes it to light itself, and encodes its output
-the same way: in Resolve, use it in a display-referred (gamma-encoded) part of the
-grade, or convert to that around it in a scene-linear or ACES pipeline. A float
-clip goes through in float from end to end — no 8-bit step anywhere — and values
+**Colour.** The **Encoding** control, OpenFX only and in its own **Colour** group
+after Frame, says what the clip is. **sRGB**, the default, is display-encoded picture
+(sRGB / Rec.709-style), which is what Resolume always hands over: Rebate decodes it
+to light itself and encodes its output the same way. **Linear** is linear light, the
+way Nuke and Natron work: Rebate takes it as light and hands back linear light, and
+Mix blends the clip's own linear values. Resolve hands an effect the picture as the
+grade has it, so use sRGB where that is gamma-encoded, and in a scene-linear or ACES
+pipeline convert to linear around Rebate and use Linear. Given the same light the
+two differ by the output's encoding and nothing else — bit for bit in the harness,
+and to 1/255 in five pixels of 230,400 in Resolve. Encoding is the transfer curve,
+not the primaries: the three channels reach the film's three layers as they come. A
+float clip goes through in float from end to end — no 8-bit step anywhere — and values
 above 1 are scene light above white, which the curve's shoulder takes. 8- and
 16-bit clips are widened to float once and an integer output is rounded once, at
 the end. Transparent pixels are no light (premultiplied colour is the scene); the
@@ -215,13 +223,16 @@ scan is opaque.
   and in the edge print: 0.2–0.7% of pixels on a deliberately hard-edged 1080p
   card, worst 18 of 255 under Cross. In Full, which reads the scene unfiltered, they
   differ in 12 pixels of 2 million. See [Status](#status).
+- **Encoding (sRGB / Linear) exists only here.** Resolume always hands an effect
+  display-encoded picture; an OpenFX host may hand over linear light.
 - **No audio, beat sync or event buttons** to drop — the Resolume build has none.
   The About group is OFX's own: a credit line and real buttons.
 
 ## Status
 
 **v0.2.0, and honestly early — 4 October 2026.** v0.2.0 adds the OpenFX build; the
-Resolume build renders as it did at v0.1.0.
+Resolume build renders as it did at v0.1.0. On main since, not yet released: the
+OpenFX build's **Encoding** control (sRGB / Linear).
 
 ### Measured offline, on macOS
 
@@ -288,18 +299,23 @@ Released at v0.2.0. Measured on the same machine on 2026-10-03:
 | against the Resolume build | the same card through the FFGL plugin (`rbtest --pipe`) and the OFX bundle at 15 settings. In Full, which reads the scene unfiltered, **12** and **127** pixels of 2,073,600 differ (all but five by 1/255; the five are grain). In the film formats **0.19–0.72%** of pixels differ, worst **18/255** (Cross) at the default grain, all on the scene's hard edges and in the edge print; at Grain Amount 1, 0.05–0.10% differ by up to 53/255, where an edge's filtered value moves a grain site across its threshold. That is the GPU's 8-bit filter weights: the CPU render with its weights rounded the same way differs from the FFGL plugin at **0.001–0.03%** of pixels (0.28% under Mix 0.5, by one step). A control (the GPU at Portrait 400, OFX at Fine 100) differs at **39%** of pixels |
 | Fusion's missing clip frame rate | Resolve's Fusion page reports the frame rate on the effect but on no clip, and the first OpenFX build, which read a clip's, failed there (found by the real-Resolve check on sibling ports). Under the test host's `--quirks fusion`, which is stricter and withholds the effect's rate too, the earlier build fails with `kOfxStatErrMissingHostFeature`; this one renders, **byte-identical** to a 24 fps host's render of the same frame and unmoved by the rate the host does not report. `tools/verify.sh` checks it when that host is available |
 | in DaVinci Resolve | **Resolve Studio 21.1** on macOS (2026-10-04), the bundle as a **Fusion tool** at the default controls: it renders, and six frames rendered out of Resolve match the test host's renders of the same frames at 24 fps in every pixel but **one**, which is off by 1/255 |
+| `rbtest --linear` | Encoding: Linear, which the shaders do not have for `--cpu` to compare, against the sRGB path on the CPU: the same frame as an sRGB clip and as that clip decoded to light by the film's own decode. In Full, at seven settings (both Views, both scans, every Process, a leak, Grain Amount 1, and a float wedge reaching about 35 in light), the Linear output re-encoded is **bit-identical** to the sRGB output in every channel of every pixel; at Mix 0.5 it is the clip's own values blended with the scan, to one ULP; 35 mm and 6x6 on a flat grey are bit-identical too (the check allows 1e-5: the gate's reduction averages light on one path and encoded values on the other, which moves a hard edge), holes exactly 0 on both. A control, the linear clip with the switch off, differs in 73% of channels. At 320×180 and 1280×720. `verify.sh` also sets `encoding` through ofxprobe: on a black-and-white card Linear renders darker than sRGB (mean 40.1 against 46.4 of 255), as an output left unencoded must |
+| Encoding in DaVinci Resolve | **Resolve Studio 21.1** on macOS (2026-10-04), as a Fusion tool at Format Full with no grain, on a 640×360 card of a grey ramp, colour patches and a colour ramp. Rebate at sRGB, against a Custom Tool converting the clip to linear with the sRGB formula, Rebate at Linear and a Custom Tool converting back: **230,395 of 230,400 pixels identical**, five off by 1/255. Rebate at Linear on the unconverted clip differs at 98% of pixels, worst 61/255 |
 | determinism | frame 9 of a changing sequence is byte-identical rendered alone, after frames 0–8 in one instance, and after 9, 3, 11 out of order; at 25 fps frames 0 and 1 share film frame 0 and grain identically, frame 2 does not |
 | float | a float render and an 8-bit render of an 8-bit card are byte-identical after the host's rounding; `rbtest --cpu`'s float wedges carry values above 1 through both builds alike |
 | bundle | universal, exports `OfxGetPlugin`, `CFBundleExecutable` is on disk, ad-hoc signs; CI builds it for Windows x64 and for Linux on AlmaLinux 8, and a stock Rocky 8 container dlopens it and lists its plugin |
 | render cost | **~30 ms** per 1920×1080 frame on 16 threads (best of three runs of 10), **~250 ms** on one; **~40 ms** in the test host, which caps itself at 8 threads |
 
 **Not established:** it has **never been loaded in Vegas, Nuke or Natron**, and in
-Resolve only on macOS, as a Fusion tool at the default controls; the other host it
-has met is the command-line test host, which renders at scale 1, never tiles, and
-hands over 8-bit or float RGBA. 16-bit clips, RGB-only clips, unpremultiplied clips
-and reduced render scales are handled in the code and have not been exercised by the
-test host; what Resolve handed the plugin was not checked. The Windows build has
-only been compiled, and the Linux build only loaded; neither has rendered in a host.
+Resolve only on macOS, as a Fusion tool: at the default controls, and with Encoding
+at Linear in Full behind Custom Tool conversions, never on the Color page, a
+colour-managed timeline or ACES, so Linear has never met a host whose working space
+is linear. The other host it has met is the command-line test host, which renders at
+scale 1, never tiles, and hands over 8-bit or float RGBA. 16-bit clips, RGB-only
+clips, unpremultiplied clips and reduced render scales are handled in the code and
+have not been exercised by the test host; what Resolve handed the plugin was not
+checked. The Windows build has only been compiled, and the Linux build only loaded;
+neither has rendered in a host.
 
 The [user guide](docs/USER-GUIDE.md) covers every control, what it does and why.
 

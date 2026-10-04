@@ -38,8 +38,8 @@ scanner.
 
 ## Verify
 - Everything: `tools/verify.sh` (fresh universal build + glslc + the demo's shader
-  copies + every check at 320x180 AND 1280x720, `--cpu` included + --pipe + the sweep +
-  the bundle + the OpenFX bundle through ofxprobe, ~30 s)
+  copies + every check at 320x180 AND 1280x720, `--cpu` and `--linear` included + --pipe +
+  the sweep + the bundle + the OpenFX bundle through ofxprobe, Encoding included, ~30 s)
 - The demo's shaders and glyph table are still the plugin's: `python3 demo/tools/check_shaders.py`
 - The curve: slope γ, toe and shoulder where it says: `./build/rbtest --curve`
 - Push reads back γ × 1.15 and fog + 0.03: `./build/rbtest --push`
@@ -54,6 +54,8 @@ scanner.
   `./build/rbtest --perturb BITS --mask` (bits in `Model.h`)
 - The OpenFX build's CPU passes agree with the shaders: `./build/rbtest --cpu` (measures
   the GL's filter first; the minified edge print below ~245 rows is reported, not bounded)
+- The OpenFX build's Encoding: Linear is the sRGB path without its decode and encode:
+  `./build/rbtest --linear` (no GLSL to compare it with, so `--cpu` cannot see it)
 - The OpenFX build's render cost: `./build/rbtest --bench-cpu --size 1920x1080`
 - Every check takes `--size WxH`; CI runs them at 320x180
 - No dead controls: `python3 tools/sweep.py` (`--size WxH`, `--jobs N`)
@@ -66,7 +68,9 @@ scanner.
   the numbers; the `kModel` GLSL library in `Shaders.cpp` holds the arithmetic, and is
   assembled into the film, blocks and scan passes. A wrong curve is a GLSL fix —
   **and a `Render.cpp` fix**: the OpenFX build's CPU copy of the per-pixel passes,
-  marked `//= mirrored` on both sides. `rbtest --cpu` fails when the two part.
+  marked `//= mirrored` on both sides. `rbtest --cpu` fails when the two part. One
+  branch is CPU only: `Uniforms::linearClip`, the OpenFX build's Encoding: Linear,
+  which skips the film's sRGB decode and the scan's encode; `rbtest --linear` checks it.
 - **The per-frame arithmetic is `render::Prepare`** (Render.cpp), which ProcessOpenGL
   and the OpenFX build both call; the defaults are `render::HostValues`, which the
   FFGL constructor and the OFX describe both read. One copy of each.
@@ -103,7 +107,8 @@ scanner.
 - macOS build must be universal. Verify with `lipo`, never the build log.
 - FFGL id is `RB01`, display name `SW Rebate`. OFX identifier `com.stoatworks.rebate`,
   label `Rebate`, bundle id `com.stoatworks.rebate.ofx` — permanent, saved projects
-  refer to them, and to the OFX script names (`exposure`, `maskOn`, `processGroup`…).
+  refer to them, and to the OFX script names (`exposure`, `maskOn`, `processGroup`,
+  `encoding`…).
 
 ## Not done yet
 - **Never loaded into Resolume on macOS.** Everything numeric is measured offline on
@@ -115,7 +120,10 @@ scanner.
 - No factory presets.
 - **The OpenFX build has never been in Vegas, Nuke or Natron**, and in Resolve only as
   a Fusion tool: Resolve Studio 21.1 on macOS (2026-10-04), at the defaults, rendered
-  six frames matching the test host at 24 fps, one pixel off by 1/255. Otherwise it
+  six frames matching the test host at 24 fps, one pixel off by 1/255; and Encoding:
+  Linear at Full behind Custom Tool conversions to and from linear, five pixels of
+  230,400 off by 1/255 against sRGB. Never the Color page or a linear working space
+  by itself. Otherwise it
   has met only the fleet's command-line OFX host (8-bit and float RGBA, scale 1, no
   tiles); Windows is compiled by CI, Linux is dlopened on Rocky 8 by CI, neither has
   rendered.

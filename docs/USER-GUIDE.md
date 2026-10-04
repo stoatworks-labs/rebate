@@ -2,7 +2,7 @@
 
 Rebate is **colour negative film, and the scan of it, for [Resolume](https://resolume.com) Arena
 and Avenue**, as an FFGL effect — and for DaVinci Resolve, Vegas, Nuke and Natron as an OpenFX
-plugin with the same controls (see [In Resolve, Vegas, Nuke and Natron](#in-resolve-vegas-nuke-and-natron)).
+plugin with the same controls and one more (see [In Resolve, Vegas, Nuke and Natron](#in-resolve-vegas-nuke-and-natron)).
 It is not a lookup table. The clip is treated as the scene: it
 exposes the three layers of a colour negative, each layer is developed along a characteristic
 curve into dye, the dyes' impurities are cancelled by an orange mask, the dye is realised as
@@ -362,15 +362,25 @@ transparency. Below 1 the output, alpha included, is mixed towards the clip's.
 
 The OpenFX build is the same film: the same stocks, curves, mask, grain, leak, scanner and
 rebate, the same controls in the same six groups with the same ranges and defaults, so
-everything above applies. It renders on the CPU instead of the GPU, and its per-pixel arithmetic
+everything above applies, and one control of its own, Encoding. It renders on the CPU instead of the GPU, and its per-pixel arithmetic
 is a line-for-line copy of the shaders that is rendered against them on every check of the
 source.
 
-**Colour.** Rebate treats its input as display-encoded picture (sRGB / Rec.709-style), decodes
-it to light itself, and encodes its output the same way. In Resolve, put it where the picture is
-gamma-encoded, or convert to that around it in a scene-linear or ACES grade. A float clip goes
-through in float from end to end, and values above 1 are light above white, which the curve's
-shoulder takes. Transparent parts of a clip are no light: unexposed film.
+**Colour.** One control here is not in Resolume: **Encoding**, in its own **Colour** group after
+Frame, which says what the clip is.
+
+- **sRGB**, the default, is display-encoded picture (sRGB / Rec.709-style), which is all Resolume
+  ever hands an effect. Rebate decodes it to light itself and encodes its output the same way.
+- **Linear** is linear light, with mid grey near 0.18, the way Nuke and Natron work. Rebate takes
+  it as light and hands back linear light, and Mix blends the clip's own linear values.
+
+Resolve hands an effect the picture as the grade has it at that point: where that is
+gamma-encoded, use sRGB; in a scene-linear or ACES grade, convert to linear around Rebate and use
+Linear. Either way it is the same film: given the same light, the two differ only in how the
+output is encoded. Encoding is the transfer curve, not the primaries — the red, green and blue of
+the clip expose the film's three layers as they come. A float clip goes through in float from end
+to end, and values above 1 are light above white, which the curve's shoulder takes. Transparent
+parts of a clip are no light: unexposed film.
 
 What is different, and why:
 
@@ -386,6 +396,8 @@ What is different, and why:
   GPU's texture filter rounds its weights, the CPU's does not, and the formats filter the scene
   into the frame and the edge print onto the film. Full reads the picture unfiltered and agrees
   but for the odd grain cell and one-level rounding.
+- **Encoding** (sRGB / Linear) exists only here, because Resolume's picture is always
+  display-encoded.
 - **The About group** has a credit line and real buttons that open this guide, the project page,
   the source and the support page.
 

@@ -37,6 +37,8 @@
 #                   --negative  every one of those FAILS on a perturbed model
 #                   --cpu       the OpenFX build's CPU copy of the passes
 #                               agrees with the shaders, and a control fails
+#                   --linear    the OpenFX build's Encoding: Linear is the
+#                               sRGB path without its decode and encode
 #   sweep         does every control change the picture. A GLSL uniform whose
 #                 name does not match the C++ is ignored without a word.
 #   bench         the render cost, for the record. Not pass/fail.
@@ -181,7 +183,7 @@ fi
 
 for size in 320x180 1280x720; do
 	step "physics at $size"
-	for check in curve push mask grain leak cross rebate seed resize negative cpu; do
+	for check in curve push mask grain leak cross rebate seed resize negative cpu linear; do
 		if out=$("$RBTEST" --$check --size $size 2>&1); then
 			pass "rbtest --$check: $( printf '%s\n' "$out" | grep -v '^$' | tail -1 )"
 		else
@@ -387,6 +389,38 @@ if [ "$(uname)" = "Darwin" ]; then
 				pass "renders ($(grep -oE '[0-9]+ of [0-9]+ bytes differ' <<<"$result") from the input)"
 			fi
 			rm -rf "$(dirname "$out")"
+
+			# Encoding is OpenFX only and has no GLSL: rbtest --linear holds
+			# the CPU branch to the sRGB path, and this holds the plugin to the
+			# branch. On a black-and-white card both encodings hand the film
+			# the same light (the decode keeps 0 and 1), so Linear differs only
+			# by the scan's missing encode, which never raises a value: the
+			# frames must differ, and Linear's mean must be the lower.
+			bw="$(mktemp -d)"
+			python3 - "$bw/bw.ppm" <<'PY'
+import sys
+w, h = 320, 180
+px = bytearray()
+for y in range(h):
+    for x in range(w):
+        px += bytes((255, 255, 255) if (x // 16 + y // 16) % 2 else (0, 0, 0))
+open(sys.argv[1], 'wb').write(b'P6\n%d %d\n255\n' % (w, h) + px)
+PY
+			encoded=$("$OFXPROBE" --no-system-dirs --dir "$BUILD" --render com.stoatworks.rebate --in "$bw/bw.ppm" --set encoding=0 2>&1)
+			linear=$("$OFXPROBE" --no-system-dirs --dir "$BUILD" --render com.stoatworks.rebate --in "$bw/bw.ppm" --set encoding=1 2>&1)
+			meanOf() { awk '/out mean/ { print ($4 + $5 + $6) / 3; exit }' <<<"$1"; }
+			hashOf() { grep -oE 'fnv1a64 [0-9a-f]+' <<<"$1"; }
+			if grep -q WARNING <<<"$encoded$linear" || [ -z "$(hashOf "$linear")" ]; then
+				fail "Encoding is not a parameter ofxprobe can set, or Linear does not render"
+				grep -E 'WARNING|rendered|status' <<<"$linear" | sed 's/^/       /'
+			elif [ "$(hashOf "$encoded")" = "$(hashOf "$linear")" ]; then
+				fail "Encoding: Linear renders the same frame as sRGB -- the control is not wired"
+			elif ! awk -v l="$(meanOf "$linear")" -v e="$(meanOf "$encoded")" 'BEGIN { exit !( l < e ) }'; then
+				fail "Encoding: Linear is not darker than sRGB on a black-and-white card ($(meanOf "$linear") vs $(meanOf "$encoded"))"
+			else
+				pass "Encoding: Linear is wired: mean $(meanOf "$linear") against sRGB's $(meanOf "$encoded") on a black-and-white card"
+			fi
+			rm -rf "$bw"
 		fi
 
 		#-------------------------------------------------------------------
