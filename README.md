@@ -134,6 +134,13 @@ so the footage is rendered by this repository's own offline harness
 (`rbtest --pipe`, driven by a cue sheet) rather than filmed off a screen, and
 the clips are Resolume's bundled demo media.*
 
+*[Encoding, in DaVinci Resolve](https://www.youtube.com/watch?v=wS64wapYJAk) — 42 seconds, for
+v0.3.0: a linear clip left at sRGB, decoded a second time so the film starves, then Linear; the
+switch flipped on a grey clip; a seam across the frame where the display-encoded clip at sRGB
+and the linear clip at Linear meet, 99.96% of pixels identical; and Linear on display-encoded
+picture, flat and lifted. Rendered by DaVinci Resolve Studio 21.1 itself, the OpenFX build on
+its Fusion page, driven over Resolve's scripting API.*
+
 ## Controls
 
 | Group | |
@@ -188,7 +195,8 @@ grade has it, so use sRGB where that is gamma-encoded, and in a scene-linear or 
 pipeline convert to linear around Rebate and use Linear. Given the same light the
 two differ by the output's encoding and nothing else — bit for bit in the harness,
 and to 1/255 in five pixels of 230,400 in Resolve. Encoding is the transfer curve,
-not the primaries: the three channels reach the film's three layers as they come. A
+not the primaries: the three channels reach the film's three layers as they come. [A 42-second
+video](https://www.youtube.com/watch?v=wS64wapYJAk) shows both settings, and both mistakes, in Resolve. A
 float clip goes through in float from end to end — no 8-bit step anywhere — and values
 above 1 are scene light above white, which the curve's shoulder takes. 8- and
 16-bit clips are widened to float once and an integer output is rounded once, at
