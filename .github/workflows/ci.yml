@@ -64,6 +64,7 @@ jobs:
           ./build/rbtest --resize   --size 320x180
           ./build/rbtest --negative --size 320x180
           ./build/rbtest --cpu      --size 320x180
+          ./build/rbtest --linear   --size 320x180
 
       - name: Controls
         # At 160x90 and two at a time, because the runner has no GPU and the
