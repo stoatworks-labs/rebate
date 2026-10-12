@@ -1,32 +1,26 @@
 # rebate
 
 > **AI-assisted project.** This codebase was created with [Claude](https://claude.com/claude-code)
-> (Anthropic), directed and reviewed by a human author. The film is not asserted
-> but measured: an offline harness drives the real plugin class in a headless GL
-> context and reads each claim back out of the picture — a grey wedge's density
-> climbs with slope γ and bends where the curve says, a neutral wedge through C-41
-> with its orange mask inverts to neutral to 1e-6, grain's variance is
-> c(1 − c)/N and peaks at c = 0.5 over 921,600 samples a field, one stop of push
-> raises γ × 1.15 and fog by 0.03, a light leak rises and saturates on the
-> shoulder and is warm, cross-processed film scans warm where the model says, the
-> sprocket holes are black — with eleven negative controls that prove each check
-> can fail. It has **never been loaded into Resolume on macOS**, where it is loaded by
-> [oxbow](https://github.com/stoatworks-labs/oxbow), which is a real FFGL host and
-> is not Resolume. On Windows, a build of v0.1.0 loads, registers and renders in
-> Resolume Arena 7.27.1 with every control as declared, on software rendering. The
-> [OpenFX build](#openfx--resolve-vegas-nuke-natron) renders the same film on the CPU
-> and is checked against the shaders pixel for pixel. As a Fusion tool in DaVinci
-> Resolve Studio 21.1 on macOS it renders what the fleet's command-line OFX test host
-> does, to within 1/255; it has never been in Vegas, Nuke or Natron. See
-> [Status](#status).
+> (Anthropic), directed and reviewed by a human author. The film is measured rather than
+> taken on trust: an offline harness drives the real plugin class in a headless GL context and
+> reads each claim back out of the picture, with eleven negative controls to show every check
+> can fail. It has **never been loaded into Resolume on macOS**. On a Mac the only host it's met
+> is [oxbow](https://github.com/stoatworks-labs/oxbow), which is a real FFGL host but isn't
+> Resolume. On Windows, a build of v0.1.0 loads, registers and renders in Resolume Arena 7.27.1
+> with every control as declared, on software rendering. The
+> [OpenFX build](#openfx--resolve-vegas-nuke-natron) renders the same film on the CPU and is
+> checked against the shaders pixel for pixel. As a Fusion tool in DaVinci Resolve Studio 21.1
+> on macOS it renders what the fleet's command-line OFX test host does, to within 1/255, and
+> it's never been in Vegas, Nuke or Natron. The numbers are all under [Status](#status).
 
 Colour negative film, and the scan of it, as an FFGL effect for
-[Resolume](https://resolume.com) Arena and Avenue, and as an OpenFX plugin for
-DaVinci Resolve, Vegas, Nuke and Natron.
+[Resolume](https://resolume.com) Arena and Avenue and as an OpenFX plugin for
+DaVinci Resolve, Vegas, Nuke and Natron. You get the orange mask, the grain, the light leaks
+and the expired stock, and nobody has to wait a week for the lab to send the scans back.
 
 ![A test card on a strip of 35 mm colour negative, scanned and inverted: fine grain, a warm light leak burning in from the right edge across the rebate, sprocket holes, and edge print reading PT400, 11A, >12 and 12A](docs/hero.png)
 
-<sub>One frame, rendered by `rbtest`, the offline harness — not captured from
+<sub>One frame, rendered by `rbtest`, the offline harness, rather than captured from
 Resolume. The 400-speed portrait negative on a 35 mm strip, with a leak.</sub>
 
 <!-- downloads:start -->
@@ -74,72 +68,76 @@ macOS builds are signed and notarised and open normally. The Windows builds are 
 
 ## The one idea
 
-A film look is usually a lookup table. This is the process.
+Most film looks are a lookup table. Rebate runs the process instead.
 
 The clip is the **scene**. It exposes the three dye layers of a colour negative
 through the overlap of their spectral sensitivities. Each layer is developed along
-a characteristic curve — a toe, a straight line of slope γ, a shoulder — into dye.
-The dyes are impure, so the film carries masking couplers that cancel their
+a characteristic curve (a toe, a straight line of slope γ, a shoulder) into dye.
+The dyes are impure, so the film carries masking couplers to cancel out their
 impurities, which is why a negative is orange. The dye is made of clouds in grain
-cells. Then the flat orange negative is **scanned and inverted**, the way a lab
+cells. Then the flat orange negative is **scanned and inverted** the way a lab
 scanner does it: divide by the base, set the levels, invert.
 
 ![The same card as the negative itself on a light box: an orange strip with clear sprocket holes, dark edge print, and the picture inverted and orange](docs/negative.png)
 
-<sub>`View: Negative` — what is on the film before the scanner inverts it.</sub>
+<sub>`View: Negative`: what's on the film before the scanner inverts it.</sub>
 
 ## What falls out
 
-None of these is drawn. Each is one stage of the process doing what it does:
+Nothing here is painted on afterwards. Each one is a stage of the process doing what it
+does:
 
-- **The orange negative.** The mask: coloured coupler wherever dye did not form,
-  carrying exactly the unwanted absorption that dye would have had. `View: Negative`
-  shows it; the scanner divides it out.
-- **Grain in the mid-tones.** Each cell holds N sites a dye cloud may land on, so
-  the covered fraction's variance is c(1 − c)/N: largest at mid density, zero in
-  clear shadows and blocked highlights. Nothing is tuned to put it there. `Stock`
-  sets N, `Grain Size` the cell.
+- **The orange negative.** The mask: coloured coupler wherever dye didn't form,
+  carrying the very same unwanted absorption that dye would have had. `View: Negative`
+  shows it, and the scanner divides it out.
+- **Grain in the mid-tones.** Each cell holds N sites a dye cloud can land on, so
+  the variance of the covered fraction is c(1 − c)/N: biggest at mid density, and zero in
+  clear shadows and blocked highlights. Nothing's been tuned to put it there. `Stock`
+  sets N and `Grain Size` the cell.
 - **Blue shadows on expired stock.** Age fog is an exposure (radiation and heat in
-  storage), it goes through the curve so it lifts the shadows and not the
-  highlights, and the top, blue-sensitive layer takes the most of it. Scanned with
-  the stock's normal profile, the blacks go blue and the highlights warm.
-  `Auto Levels` — the lab re-measuring the roll — takes most of it back out.
+  storage), so it goes through the curve: it lifts the shadows and not the
+  highlights, and the top, blue-sensitive layer takes most of it. Scan it with the
+  stock's normal profile and the blacks go blue and the highlights warm.
+  `Auto Levels`, which is the lab re-measuring the roll, takes most of it back out.
 - **The warm light leak.** Light through the base reaches the red-sensitive layer
-  first. It is an exposure, so it saturates on the shoulder instead of adding
+  first. It's an exposure, so it saturates on the shoulder instead of piling up
   without limit, and it fogs the rebate along with the picture.
 - **Cross-processing.** Reversal film through C-41: no masking couplers, a steep
-  curve, and a scanner that divides by an orange mask that is not there. The
-  positive goes warm, most in the shadows, and the shift shrinks toward the
-  highlights where the mask it expected would have been used up.
-- **The rebate.** Unexposed film around the frame, which prints black; the edge
-  print, pre-exposed at manufacture as a latent image, which prints light on it;
-  the sprocket holes, clear, which clip to black. The stock codes and frame numbers
-  are invented. No real manufacturer's name or mark appears anywhere.
+  curve, and a scanner dividing by an orange mask that isn't there. The
+  positive goes warm, most of all in the shadows, and the shift shrinks toward the
+  highlights, where the mask it was expecting would have been used up.
+- **The rebate.** The unexposed film round the frame, which prints black; the edge
+  print, pre-exposed at the factory as a latent image, which prints light on it;
+  and the sprocket holes, clear, which clip to black. The stock codes and frame numbers
+  are made up. No real manufacturer's name or mark appears anywhere.
 
 ### The honest limit
 
 The model is three layers with one curve shape between them, a 3×3 spectral
-crossover and a 3×3 dye-impurity matrix: enough for every mechanism above, not a
-spectral simulation of any real stock. The stocks are invented and described by
+crossover and a 3×3 dye-impurity matrix. That's enough for every mechanism above, but
+it isn't a spectral simulation of any real stock. The stocks are invented and described by
 their parameters (γ, grain sites, fog, age), not measured from anything. Grain is
-per output pixel rather than per micron of film, so it does not scale with the
+per output pixel rather than per micron of film, so it doesn't scale with the
 frame. Real development has adjacency effects, interlayer inhibition and a
-coupler chemistry this does not model, and a real lab scanner has a colour
-matrix and a tone curve of its own that here are one levels step and one gamma.
+coupler chemistry I don't model, and a real lab scanner has a colour
+matrix and a tone curve of its own, which here are one levels step and one gamma.
 
 [![Rebate — colour negative film, and its scan, for Resolume](docs/video-thumb.png)](https://www.youtube.com/watch?v=E0fywpoLngg)
 
-*[Watch it](https://www.youtube.com/watch?v=E0fywpoLngg) — 56 seconds: the clip on its 35 mm strip in a black rebate, the orange negative the scanner divides out, a light leak through the base, three stops under to three over through the curve, an expired roll's blue shadows, grain loudest in the mid-tones, and cross-processing. Every frame is the real plugin's output: an FFGL plugin has no window,
-so the footage is rendered by this repository's own offline harness
-(`rbtest --pipe`, driven by a cue sheet) rather than filmed off a screen, and
-the clips are Resolume's bundled demo media.*
+*[Watch it](https://www.youtube.com/watch?v=E0fywpoLngg) (56 seconds): the clip on its 35 mm
+strip in a black rebate, the orange negative the scanner divides out, a light leak through the
+base, three stops under to three over through the curve, an expired roll's blue shadows, grain
+loudest in the mid-tones, and cross-processing. It's all the plugin's own output. An FFGL plugin
+doesn't have a window to film, so the footage comes from this repo's offline harness
+(`rbtest --pipe`, driven by a cue sheet) rather than a screen recording, and the clips are
+Resolume's bundled demo media.*
 
-*[Encoding, in DaVinci Resolve](https://www.youtube.com/watch?v=wS64wapYJAk) — 42 seconds, for
-v0.3.0: a linear clip left at sRGB, decoded a second time so the film starves, then Linear; the
-switch flipped on a grey clip; a seam across the frame where the display-encoded clip at sRGB
-and the linear clip at Linear meet, 99.96% of pixels identical; and Linear on display-encoded
-picture, flat and lifted. Rendered by DaVinci Resolve Studio 21.1 itself, the OpenFX build on
-its Fusion page, driven over Resolve's scripting API.*
+*[Encoding, in DaVinci Resolve](https://www.youtube.com/watch?v=wS64wapYJAk) (42 seconds, for
+v0.3.0): a linear clip left at sRGB, so it's decoded a second time and the film starves, then
+Linear; the switch flipped on a grey clip; a seam across the frame where the display-encoded
+clip at sRGB meets the linear clip at Linear, with 99.96% of pixels identical; and Linear on
+display-encoded picture, flat and lifted. Rendered by DaVinci Resolve Studio 21.1 itself, with
+the OpenFX build on its Fusion page, driven over Resolve's scripting API.*
 
 ## Controls
 
@@ -155,23 +153,22 @@ its Fusion page, driven over Resolve's scripting API.*
 
 The defaults are the Portrait 400, normally exposed and developed, grain at about
 a third of its physical fluctuation, scanned **manually** with the lab's C-41
-profile, on a 35 mm strip. Manual rather than auto so that Exposure, Age and Cross
-do what they say out of the box; turn on Auto Levels for footage that needs the
+profile, on a 35 mm strip. It's manual rather than auto so that Exposure, Age and Cross
+do what they say out of the box. Turn on Auto Levels for footage that needs the
 lab's help.
 
 ## OpenFX — Resolve, Vegas, Nuke, Natron
 
 The same film also builds as an OpenFX plugin, **Rebate** in the **Stoatworks**
 group, for DaVinci Resolve, Vegas Pro, Nuke and Natron. It renders on the CPU
-across the host's threads. The stocks, the curves,
-the scanner's profile, every control's conversion, the rebate's geometry, the edge
-print and the per-frame arithmetic are the same C++ the Resolume build runs; the
-per-pixel passes are a line-for-line copy of its shaders (`source/Render.cpp`), and
-`rbtest --cpu` renders both and compares them on every `tools/verify.sh`. Same
-controls, same groups, same 0..1 ranges and defaults, so the
-[user guide](docs/USER-GUIDE.md) covers both.
+across the host's threads. The stocks, the curves, the scanner's profile, every control's
+conversion, the rebate's geometry, the edge print and the per-frame arithmetic are the same
+C++ the Resolume build runs. The per-pixel passes are a line-for-line copy of its shaders
+(`source/Render.cpp`), and `rbtest --cpu` renders both and compares them on every
+`tools/verify.sh`. It has the same controls, the same groups, the same 0..1 ranges and the
+same defaults, so the [user guide](docs/USER-GUIDE.md) covers both.
 
-Releases carry it from **v0.2.0**, as zips of its own beside the Resolume build's:
+Releases carry it from **v0.2.0** on, as zips of their own beside the Resolume build's:
 `rebate-ofx-macos-universal.zip`, `rebate-ofx-windows-x86_64.zip` and
 `rebate-ofx-linux-x86_64.zip`. Take the one for your platform, copy
 `Rebate.ofx.bundle` into the standard OpenFX folder, then restart the host:
@@ -182,72 +179,72 @@ Windows  C:\Program Files\Common Files\OFX\Plugins\
 Linux    /usr/OFX/Plugins/
 ```
 
-The macOS build is universal; the Linux build is x86_64 against glibc 2.28, so it
+The macOS build is universal. The Linux build is x86_64 against glibc 2.28, so it
 loads on Rocky 8, the oldest Linux Resolve supports.
 
-**Colour.** The **Encoding** control, OpenFX only and in its own **Colour** group
-after Frame, says what the clip is. **sRGB**, the default, is display-encoded picture
+**Colour.** The **Encoding** control (OpenFX only, in its own **Colour** group after
+Frame) tells Rebate what the clip is. **sRGB**, the default, is display-encoded picture
 (sRGB / Rec.709-style), which is what Resolume always hands over: Rebate decodes it
 to light itself and encodes its output the same way. **Linear** is linear light, the
 way Nuke and Natron work: Rebate takes it as light and hands back linear light, and
 Mix blends the clip's own linear values. Resolve hands an effect the picture as the
-grade has it, so use sRGB where that is gamma-encoded, and in a scene-linear or ACES
-pipeline convert to linear around Rebate and use Linear. Given the same light the
-two differ by the output's encoding and nothing else — bit for bit in the harness,
+grade has it, so use sRGB where that's gamma-encoded, and in a scene-linear or ACES
+pipeline convert to linear around Rebate and use Linear. Given the same light, the
+two differ by the output's encoding and nothing else: bit for bit in the harness,
 and to 1/255 in five pixels of 230,400 in Resolve. Encoding is the transfer curve,
-not the primaries: the three channels reach the film's three layers as they come. [A 42-second
-video](https://www.youtube.com/watch?v=wS64wapYJAk) shows both settings, and both mistakes, in Resolve. A
-float clip goes through in float from end to end — no 8-bit step anywhere — and values
-above 1 are scene light above white, which the curve's shoulder takes. 8- and
-16-bit clips are widened to float once and an integer output is rounded once, at
-the end. Transparent pixels are no light (premultiplied colour is the scene); the
-scan is opaque.
+not the primaries, so the three channels reach the film's three layers as they come.
+[A 42-second video](https://www.youtube.com/watch?v=wS64wapYJAk) shows both settings, and
+both mistakes, in Resolve. A float clip stays float from end to end, with no 8-bit step
+anywhere, and values above 1 are scene light above white, which the curve's shoulder
+takes. 8- and 16-bit clips are widened to float once and an integer output is rounded
+once, at the end. Transparent pixels are no light (premultiplied colour is the scene),
+and the scan is opaque.
 
 **What differs from the Resolume build, and why:**
 
 - **Auto Levels measures every frame on its own.** The Resolume build settles the
-  scanner's levels over a quarter of a second, a one-pole filter on each frame's
-  least and most dense blocks — which integrates over the frames the host has shown
-  it, in order. An OpenFX host renders frames in any order, alone and concurrently,
-  so there is nothing to integrate from: the OFX build takes exactly the measurement
-  the Resolume build primes on, and has no smoothing. A cut is levelled at once
-  rather than over a quarter second. Off by default in both. The plugin's
+  scanner's levels over a quarter of a second, with a one-pole filter on each frame's
+  least and most dense blocks, which integrates over the frames the host has shown
+  it, in order. An OpenFX host renders frames in any order, alone and several at once,
+  so there's nothing to integrate: the OFX build takes the same measurement the
+  Resolume build primes on, and doesn't smooth it. A cut is levelled at once
+  rather than over a quarter second. It's off by default in both, and the plugin's
   description says so.
 - **The grain runs on timeline time:** 24 film frames per second of timeline,
   `floor( frame / frame rate × 24 )`, so a frame grains the same way however and in
-  whatever order it is rendered. The Resolume build takes seconds from the host's
+  whatever order it's rendered. The Resolume build takes seconds from the host's
   clock.
 - **Resolve's Fusion page reports the frame rate on the effect but not on its
   clips; Rebate reads the effect's, and assumes 24 fps only where a host reports
   none.** So in Fusion the grain follows the timeline's rate, as it does wherever a
   host reports one (Resolve's Edit page does). A host that reports none gets 24,
-  Resolve's default timeline rate, and there the grain advances one film frame per
-  timeline frame whatever the real rate.
+  Resolve's default timeline rate, and there the grain moves on one film frame per
+  timeline frame whatever the real rate is.
 - **A reduced render scale** (a proxy or draft render) shrinks the grain cell with
   the picture, so the reduced render point-samples the full render's grain.
 - **Texture filtering is exact float.** A GPU filters with fixed-point weights (the
-  Apple GPU this was measured on rounds them to 8 bits), so in the 35 mm and 6x6
+  Apple GPU I measured this on rounds them to 8 bits), so in the 35 mm and 6x6
   formats the two builds differ by a few 8-bit steps along hard edges in the scene
-  and in the edge print: 0.2–0.7% of pixels on a deliberately hard-edged 1080p
-  card, worst 18 of 255 under Cross. In Full, which reads the scene unfiltered, they
+  and in the edge print: 0.2–0.7% of pixels on a 1080p card made with hard edges on
+  purpose, worst 18 of 255 under Cross. In Full, which reads the scene unfiltered, they
   differ in 12 pixels of 2 million. See [Status](#status).
 - **Encoding (sRGB / Linear) exists only here.** Resolume always hands an effect
   display-encoded picture; an OpenFX host may hand over linear light.
-- **No audio, beat sync or event buttons** to drop — the Resolume build has none.
-  The About group is OFX's own: a credit line and real buttons.
+- **No audio, beat sync or event buttons** to drop, because the Resolume build hasn't
+  got any either. The About group is OFX's own: a credit line and proper buttons.
 
 ## Status
 
-**v0.3.0, and honestly early — 4 October 2026.** v0.3.0 adds the OpenFX build's
-**Encoding** control (sRGB / Linear); v0.2.0, the same day, added the OpenFX build.
+**v0.3.0, 4 October 2026, and still early days.** v0.3.0 adds the OpenFX build's
+**Encoding** control (sRGB / Linear), and v0.2.0, the same day, added the OpenFX build.
 The Resolume build renders as it did at v0.1.0.
 
 ### Measured offline, on macOS
 
-`tools/verify.sh` passes on this machine (M4 Max, macOS 26.4.1) against a fresh
+`tools/verify.sh` passes on this Mac (M4 Max, macOS 26.4.1) against a fresh
 universal Release build, running every check at **two rasters**, 320×180 and
-1280×720; the same checks also pass at 1920×1080, 640×480 and 333×187. What it
-establishes, in numbers:
+1280×720, and the same checks also pass at 1920×1080, 640×480 and 333×187. Here's what
+it shows, in numbers:
 
 | check | result |
 | --- | --- |
@@ -269,14 +266,14 @@ establishes, in numbers:
 
 Render cost at the defaults, best of three runs of 60 frames after a warm-up,
 `glFinish` both sides, on a GPU shared with other work: **0.20 ms** at 720p,
-**0.33 ms** at 1080p, **0.54 ms** at 1440p, **1.19 ms** at 4K — under a tenth of
-a 60 fps frame. Auto Levels adds its block reduction, about 0.6 ms at 4K. macOS
-figures only.
+**0.33 ms** at 1080p, **0.54 ms** at 1440p and **1.19 ms** at 4K, which is under a
+tenth of a 60 fps frame. Auto Levels adds its block reduction, about 0.6 ms at 4K.
+Those are macOS figures only.
 
 ### In Resolume, on Windows
 
 **Resolume Arena 7.27.1** (win-lab, Mesa llvmpipe, no GPU, 2026-09-24): a CI build of
-v0.1.0 loads from Extra Effects, registers as `SW Rebate` / `RB01` / effect, all 28 host
+v0.1.0 loads from Extra Effects and registers as `SW Rebate` / `RB01` / effect, all 28 host
 controls match the declaration in name, order, type, range and default, it renders, and
 Arena's log stays clean: 9 of 9 of the fleet gate's checks. 22 controls moved the
 picture, 7 of them under a precondition; Grain Seed read inconclusive. Software
@@ -284,21 +281,22 @@ rendering says nothing about a GPU or about speed.
 
 ### Not established
 
-It has **never been loaded into Resolume on macOS**. Everything above the Windows
+It's **never been loaded into Resolume on macOS**. Everything above the Windows
 section was compiled, rendered and measured offline against the real plugin class in a
-headless CGL context, plus an `oxbow` load. How 22 controls in six groups present
+headless CGL context, plus an `oxbow` load. How 22 controls in six groups look
 in Arena's inspector on a Mac, whether the stock list reads well, and what the host's clock
-does to the grain's film frame over a long session are untested. The look has been
-seen on a synthetic test card and on Resolume's bundled demo clips through
+does to the grain's film frame over a long session are all untested. So far the look has
+only been seen on a synthetic test card and on Resolume's bundled demo clips through
 `rbtest --pipe` (for the project video), never on camera footage of people or
 places. The [browser demo](https://rebate-demo.stoatworks-labs.com/)
-runs the plugin's own five shaders in WebGL2, but its CPU half — the stocks, the
-development, the scanner's profile and the film strip — is a hand port to
+runs the plugin's own five shaders in WebGL2, but its CPU half (the stocks, the
+development, the scanner's profile and the film strip) is a hand port to
 JavaScript, and nothing checks a port but a reader.
 
 ### The OpenFX build
 
-Released at v0.2.0; Encoding at v0.3.0. Measured on the same machine on 2026-10-03 and 04:
+Released at v0.2.0, with Encoding added at v0.3.0. Measured on the same machine on
+2026-10-03 and 04:
 
 | check | result |
 | --- | --- |
@@ -314,22 +312,22 @@ Released at v0.2.0; Encoding at v0.3.0. Measured on the same machine on 2026-10-
 | bundle | universal, exports `OfxGetPlugin`, `CFBundleExecutable` is on disk, ad-hoc signs; CI builds it for Windows x64 and for Linux on AlmaLinux 8, and a stock Rocky 8 container dlopens it and lists its plugin |
 | render cost | **~30 ms** per 1920×1080 frame on 16 threads (best of three runs of 10), **~250 ms** on one; **~40 ms** in the test host, which caps itself at 8 threads |
 
-**Not established:** it has **never been loaded in Vegas, Nuke or Natron**, and in
+**Not established:** it's **never been loaded in Vegas, Nuke or Natron**, and in
 Resolve only on macOS, as a Fusion tool: at the default controls, and with Encoding
-at Linear in Full behind Custom Tool conversions, never on the Color page, a
+at Linear in Full behind Custom Tool conversions. It's never been on the Color page, a
 colour-managed timeline or ACES, so Linear has never met a host whose working space
-is linear. The other host it has met is the command-line test host, which renders at
+is linear. The only other host it's met is the command-line test host, which renders at
 scale 1, never tiles, and hands over 8-bit or float RGBA. 16-bit clips, RGB-only
-clips, unpremultiplied clips and reduced render scales are handled in the code and
-have not been exercised by the test host; what Resolve handed the plugin was not
-checked. The Windows build has only been compiled, and the Linux build only loaded;
+clips, unpremultiplied clips and reduced render scales are handled in the code but
+haven't been exercised by the test host, and I didn't check what Resolve handed the
+plugin. The Windows build has only been compiled, and the Linux build only loaded;
 neither has rendered in a host.
 
 The [user guide](docs/USER-GUIDE.md) covers every control, what it does and why.
 
 ## Build
 
-Needs CMake 3.15+, a C++17 compiler, and the FFGL SDK submodule.
+You'll need CMake 3.15+, a C++17 compiler, and the FFGL SDK submodule.
 
 ```bash
 git clone --recursive https://github.com/stoatworks-labs/rebate
@@ -340,16 +338,16 @@ cmake --install build     # into ~/Documents/Resolume Arena/Extra Effects
 ```
 
 macOS builds are universal (Apple Silicon + Intel) by default; add
-`-DCMAKE_OSX_ARCHITECTURES=arm64` for a faster dev build. Windows needs GLEW via vcpkg.
+`-DCMAKE_OSX_ARCHITECTURES=arm64` for a quicker dev build. Windows needs GLEW via vcpkg.
 
-The same build also produces `build/Rebate.ofx.bundle`, the OpenFX plugin; copy it
+The same build also makes `build/Rebate.ofx.bundle`, the OpenFX plugin; copy it
 into `/Library/OFX/Plugins` by hand. `-DBUILD_OFX=OFF` skips it, and
-`-DREBATE_BUILD_FFGL=OFF` builds it alone with nothing but a compiler — no FFGL
-SDK, no GLEW — which is how the Linux job builds it.
+`-DREBATE_BUILD_FFGL=OFF` builds it on its own with nothing but a compiler (no FFGL
+SDK, no GLEW), which is how the Linux job builds it.
 
 ## Building and testing
 
-The offline harness renders the real plugin class headlessly, on a synthetic 60 fps
+The offline harness renders the real plugin class without a window, on a synthetic 60 fps
 clock:
 
 ```bash
@@ -365,7 +363,7 @@ python3 tools/sweep.py                                 # no control is silently 
 tools/verify.sh                                        # all of it, on a fresh universal build
 ```
 
-Every check takes `--size`; run it at 320×180 as well as the raster you care about.
+Every check takes `--size`, so run it at 320×180 as well as the raster you care about.
 Footage goes through the real shaders with `--pipe`, in the fleet's frame format:
 
 ```bash
