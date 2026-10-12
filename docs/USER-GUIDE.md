@@ -508,7 +508,10 @@ if it couldn't be allocated.
 - **Not verified at 4K**, only timed there.
 - **No presets.** The Stock menu is the nearest thing to a preset list.
 - **The OpenFX build has never run in Vegas, Nuke or Natron**, and in Resolve only as a Fusion
-  tool, on macOS, at the default controls, where it matched the test host to within 1/255.
+  tool, on macOS: at the default controls, where it matched the test host to within 1/255, and
+  with Encoding at Linear in Full behind conversions to and from linear, where it matched the
+  sRGB render in all but five pixels of 230,400. It's never met the Color page or a linear
+  working space.
   Otherwise it's only run in a command-line test host, on 8-bit and float pictures at full
   resolution; 16-bit and RGB-only clips, reduced render scales and unpremultiplied alpha are
   handled but untried there. The Windows build has only been compiled, and the Linux build only
