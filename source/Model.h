@@ -211,6 +211,7 @@ enum Perturb : int
 	kPerturbSeedIgnored = 1 << 7,///< grain hash ignores Grain Seed
 	kPerturbLeakCool    = 1 << 8,///< the leak's spectrum reversed, blue-weighted
 	kPerturbResizeClears = 1 << 9,///< a resize re-primes the scanner's levels
+	kPerturbHolesTurned = 1 << 10,///< sprocket holes turned through 90 degrees
 };
 
 } // namespace rebate::model

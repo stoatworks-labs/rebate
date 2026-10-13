@@ -25,8 +25,8 @@
 		                                saturates, and it is warm
 		rbtest --cross                  E-6 film through C-41 goes warm, most in
 		                                the shadows, where the model says
-		rbtest --rebate                 holes black, border unexposed, edge print
-		                                lighter than the border
+		rbtest --rebate                 holes KS-sized and black, border unexposed,
+		                                edge print lighter than the border
 		rbtest --seed                   grain is bit-identical for a seed and a
 		                                frame, and a resize does not reshuffle it
 		rbtest --resize                 the scanner's levels survive a resize
@@ -1423,18 +1423,32 @@ int runCross( int width, int height, int perturb = 0, bool quiet = false )
 // The 35 mm format on a black scene, no grain, a manual scan.
 //
 //   Negative view: every probed sprocket hole transmits fully (T = 1 within
-//   4 ULP: exp2( 0 ) may be 3 ULP off); the border (between the film edge
-//   and the holes) has exactly the density of the unexposed picture area --
-//   both are unexposed film, measured in the same frame; the edge print is
-//   denser than the border.
+//   4 ULP: exp2( 0 ) may be 3 ULP off), and measures the published KS hole,
+//   0.078 in along the strip by 0.110 in across it; the border (between two
+//   holes, clear of the print bands) has exactly the density of the
+//   unexposed picture area -- both are unexposed film, measured in the same
+//   frame; the edge print is denser than the border.
 //
 //   Positive view: holes and border are exactly 0 (the scanner clips below
 //   its black point, and expand() returns 0 for p <= 0 by construction); the
 //   edge print is lighter than the border by at least a quarter of white;
 //   with Edge Text On off, the print band is exactly the border.
 //
-// The negative control makes the holes opaque.
+// The negative controls make the holes opaque, and turn them through 90
+// degrees -- which is how v0.3.0 and earlier drew them.
 //---------------------------------------------------------------------------
+
+/// SMPTE 139 / ISO 491's KS hole, which 135 carries: 0.110 in ACROSS the film
+/// by 0.078 in along it, in the direction of travel.
+constexpr double kKsAcross = 0.110 * 25.4;
+constexpr double kKsAlong  = 0.078 * 25.4;
+
+/// How far a measured hole may be from the published size, in mm. The model
+/// rounds 0.078 in (1.9812 mm) to 1.981; the rest is float, since an edge is
+/// an analytic ramp a pixel wide and its sum is exact. A turned hole is 0.81 mm
+/// out each way.
+constexpr double kHoleTol = 1e-3;
+
 int runRebate( int width, int height, int perturb = 0, bool quiet = false )
 {
 	const frame::Geometry g = frame::Compute( frame::kStrip, width, height );
@@ -1445,19 +1459,27 @@ int runRebate( int width, int height, int perturb = 0, bool quiet = false )
 	};
 
 	//Holes: the four nearest the frame centre, top and bottom rows.
-	std::vector< std::pair< int, int > > holes;
+	struct Hole
+	{
+		int x, y;  ///< the pixel holding its centre
+		double u;  ///< its centre along the strip, mm
+		bool top;  ///< in the top row
+	};
+	std::vector< Hole > holes;
 	for( int k = -2; k < 2; ++k )
 		for( int row = 0; row < 2; ++row )
 		{
 			int x, y;
 			const double u = ( k + 0.5 ) * frame::kPerfPitch;
-			const double v = row == 0 ? frame::kPerfEdge + 0.5 * frame::kPerfHeight
-			                          : g.filmWidthMm - frame::kPerfEdge - 0.5 * frame::kPerfHeight;
+			const double v = row == 0 ? frame::kPerfEdge + 0.5 * frame::kPerfAcross
+			                          : g.filmWidthMm - frame::kPerfEdge - 0.5 * frame::kPerfAcross;
 			toPixel( u, v, x, y );
-			holes.emplace_back( x, y );
+			holes.push_back( { x, y, u, row == 0 } );
 		}
 	int borderX, borderY, pictureX, pictureY;
-	toPixel( 0.5 * frame::kPerfPitch, 1.0, borderX, borderY );
+	//The border: midway between the two top holes either side of the frame's
+	//centre, at their centre line -- unexposed film, nowhere near a print band.
+	toPixel( 0.0, frame::kPerfEdge + 0.5 * frame::kPerfAcross, borderX, borderY );
 	toPixel( 0.0, 0.5 * ( g.gate[ 1 ] + g.gate[ 3 ] ), pictureX, pictureY );
 
 	//The print band's rows whose pixels lie wholly inside band A.
@@ -1477,10 +1499,40 @@ int runRebate( int width, int height, int perturb = 0, bool quiet = false )
 		if( !renderFloat( width, height, s, black, perturb, out ) )
 			return 1;
 		double worstHole = 0.0;
-		for( const auto& h : holes )
+		for( const Hole& h : holes )
 			for( int c = 0; c < 3; ++c )
-				worstHole = std::max( worstHole, std::fabs( decodeSrgb( pixelAt( out, width, h.first, h.second )[ c ] ) - 1.0 ) );
+				worstHole = std::max( worstHole, std::fabs( decodeSrgb( pixelAt( out, width, h.x, h.y )[ c ] ) - 1.0 ) );
 		const bool holesOk = worstHole <= 4.0 * ulp( 1.0 );
+
+		//Each hole's size: the fraction of each pixel that is hole, from its
+		//blue transmittance against the border's, summed along the hole's
+		//centre row out to the midpoints between it and its neighbours, and
+		//down its centre column between the print band and the picture. A
+		//hole that ran into either would be cut short there and fail.
+		const double clearBlue = decodeSrgb( pixelAt( out, width, borderX, borderY )[ 2 ] );
+		auto holeFraction      = [ & ]( int x, int y ) {
+			return ( decodeSrgb( pixelAt( out, width, x, y )[ 2 ] ) - clearBlue ) / ( 1.0 - clearBlue );
+		};
+		double along = 0.0, across = 0.0, worstSize = 0.0;
+		for( const Hole& h : holes )
+		{
+			along        = 0.0;
+			const int x0 = static_cast< int >( std::ceil( 0.5 * width + ( h.u - 0.5 * frame::kPerfPitch ) / g.mmPerPixel ) );
+			const int x1 = static_cast< int >( std::floor( 0.5 * width + ( h.u + 0.5 * frame::kPerfPitch ) / g.mmPerPixel ) );
+			for( int x = x0; x < x1; ++x )
+				along += holeFraction( x, h.y );
+			along *= g.mmPerPixel;
+
+			across        = 0.0;
+			const int y0  = static_cast< int >( std::ceil( ( h.top ? g.bandA[ 1 ] : g.gate[ 3 ] ) / g.mmPerPixel ) );
+			const int y1  = static_cast< int >( std::floor( ( h.top ? g.gate[ 1 ] : g.bandB[ 0 ] ) / g.mmPerPixel ) );
+			for( int y = y0; y < y1; ++y )
+				across += holeFraction( h.x, y );
+			across *= g.mmPerPixel;
+
+			worstSize = std::max( { worstSize, std::fabs( along - kKsAlong ), std::fabs( across - kKsAcross ) } );
+		}
+		const bool sizeOk = worstSize <= kHoleTol;
 
 		double worstBorder = 0.0, borderDensity = 0.0;
 		for( int c = 0; c < 3; ++c )
@@ -1500,10 +1552,16 @@ int runRebate( int width, int height, int perturb = 0, bool quiet = false )
 		const bool printOk = densest > borderDensity + 0.1;
 
 		if( !quiet )
+		{
 			std::printf( "rebate negative: holes transmit 1 - %.1e; border - unexposed picture %.1e; print %.3f over a border of "
 			             "%.3f (blue)  %s\n",
 			             worstHole, worstBorder, densest, borderDensity, verdict( holesOk && borderOk && printOk ) );
+			std::printf( "rebate holes: %.4f mm along the strip x %.4f across, against KS's %.4f x %.4f; %.1e mm out at worst of "
+			             "%zu  %s\n",
+			             along, across, kKsAlong, kKsAcross, worstSize, holes.size(), verdict( sizeOk ) );
+		}
 		failures += holesOk ? 0 : 1;
+		failures += sizeOk ? 0 : 1;
 		failures += borderOk ? 0 : 1;
 		failures += printOk ? 0 : 1;
 	}
@@ -1517,9 +1575,9 @@ int runRebate( int width, int height, int perturb = 0, bool quiet = false )
 		if( !renderFloat( width, height, s, black, perturb, out ) )
 			return failures + 1;
 		double holeMax = 0.0;
-		for( const auto& h : holes )
+		for( const Hole& h : holes )
 			for( int c = 0; c < 3; ++c )
-				holeMax = std::max( holeMax, static_cast< double >( pixelAt( out, width, h.first, h.second )[ c ] ) );
+				holeMax = std::max( holeMax, static_cast< double >( pixelAt( out, width, h.x, h.y )[ c ] ) );
 		double border = 0.0;
 		for( int c = 0; c < 3; ++c )
 			border = std::max( border, static_cast< double >( pixelAt( out, width, borderX, borderY )[ c ] ) );
@@ -1540,7 +1598,7 @@ int runRebate( int width, int height, int perturb = 0, bool quiet = false )
 	}
 
 	if( !quiet )
-		std::printf( "%s\n", failures == 0 ? "rebate: holes black, border unexposed, edge print lighter than the border"
+		std::printf( "%s\n", failures == 0 ? "rebate: holes KS-sized and black, border unexposed, edge print lighter than the border"
 		                                    : "rebate: FAILURES" );
 	return failures;
 }
@@ -2427,6 +2485,7 @@ int runNegative( int width, int height )
 		{ "leak with its spectrum reversed                  ", runLeak( width, height, model::kPerturbLeakCool, true ) },
 		{ "cross with a scanner that expects no mask        ", runCross( width, height, model::kPerturbCrossProfile, true ) },
 		{ "rebate with opaque sprocket holes                ", runRebate( width, height, model::kPerturbHolesOpaque, true ) },
+		{ "rebate with the holes turned through 90 degrees  ", runRebate( width, height, model::kPerturbHolesTurned, true ) },
 		{ "seed with the seed left out of the hash          ", runSeed( width, height, model::kPerturbSeedIgnored, true ) },
 		{ "resize that re-primes the levels                 ", runResize( width, height, model::kPerturbResizeClears, true ) },
 	};
@@ -2635,7 +2694,7 @@ void usage()
 		"  --push              one stop of push raises gamma and fog by the stated amounts\n"
 		"  --leak              a leak's density follows the curve and saturates; it is warm\n"
 		"  --cross             E-6 film through C-41 scans warm, most in the shadows\n"
-		"  --rebate            holes black, border unexposed, edge print lighter\n"
+		"  --rebate            holes KS-sized and black, border unexposed, edge print lighter\n"
 		"  --seed              grain is bit-identical for a seed and a frame, at any raster\n"
 		"  --resize            the scanner's levels survive a resize\n"
 		"  --negative          every check above can fail\n"

@@ -28,9 +28,10 @@ captured from Resolume. Portrait 400 on a 35 mm strip, with a leak from the righ
 > comes out neutral to 1.1e-6. Grain variance at half coverage is 1.9158e-2 against a predicted
 > 1.9159e-2 over 921,600 samples, and peaks there in every channel. One stop of push reads back
 > γ × 1.15000 and fog +0.030000. A leak adds density along the curve and stops at its shoulder,
-> every unclipped step of a cross-processed wedge scans R > G > B, and the sprocket holes and the
-> rebate are exactly black in the positive. Eleven versions of the model, broken on purpose, were
-> each caught by those checks, and all 22 controls measurably change the picture.
+> every unclipped step of a cross-processed wedge scans R > G > B, the sprocket holes measure the
+> published KS hole to 2e-4 mm, and they and the rebate are exactly black in the positive. Twelve
+> versions of the model, broken on purpose, were each caught by those checks, and all 22 controls
+> measurably change the picture.
 >
 > It **hasn't been loaded into Resolume on macOS yet**. The one host it's run in there is the
 > fleet's own test host, `oxbow`, for 120 frames. On Windows, a build of v0.1.0 loads, registers
@@ -340,8 +341,9 @@ E-6 the profile is an unmasked slide's.
 - **6x6:** 120 roll film, 61.5 mm wide, a square 56 mm frame, no perforations. The stock code is
   printed in the top margin. There are no frame numbers, because 120 carries them on its backing
   paper, not the film.
-- **35 mm:** a 36×24 mm frame on a 35 mm strip, the common negative perforation, the stock code
-  above the frame and frame numbers below it.
+- **35 mm:** a 36×24 mm frame on a 35 mm strip with KS perforations, the ones 135 has: 2.794 mm
+  across the strip by 1.981 mm along it, so they stand taller than they're wide. The stock code runs
+  along the top edge and the frame numbers along the bottom, both in the margin outside the holes.
 
 The strip runs across the output and the film's full width fills its height, the way a strip
 scanner sees it. The clip is centre-cropped to the frame's shape (3:2, or square), and everything

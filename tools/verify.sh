@@ -31,7 +31,7 @@
 #                   --grain     variance c(1-c)/N, peak at 0.5, zero at ends
 #                   --leak      follows the curve, saturates, is warm
 #                   --cross     reversal film in C-41 scans warm, as predicted
-#                   --rebate    holes black, border unexposed, print lighter
+#                   --rebate    holes KS-sized and black, border unexposed, print lighter
 #                   --seed      grain bit-identical for a seed, at any raster
 #                   --resize    the scanner's levels survive a resize
 #                   --negative  every one of those FAILS on a perturbed model

@@ -95,19 +95,21 @@ Geometry Compute( int format, int width, int height )
 	else
 	{
 		//35 mm: a 36 x 24 frame centred on a 35 mm strip. The perforations are
-		//2.01 to 3.99 mm in from each edge; the edge print sits in the 1.5 mm
-		//between the holes and the picture, the stock code above and the frame
-		//numbers below.
+		//2.01 to 4.80 mm in from each edge, which leaves 0.7 mm between them
+		//and the picture: no room for a 1 mm line. The edge print sits where
+		//135 carries it, in the margin outside the holes, 0.5 to 1.5 mm in:
+		//the stock code along the top edge, the frame numbers along the
+		//bottom.
 		g.filmWidthMm = 35.0;
 		g.gate[ 0 ]   = -18.0;
 		g.gate[ 1 ]   = 5.5;
 		g.gate[ 2 ]   = 18.0;
 		g.gate[ 3 ]   = 29.5;
 		g.holes       = true;
-		g.bandA[ 0 ]  = 4.25;
-		g.bandA[ 1 ]  = 5.25;
-		g.bandB[ 0 ]  = 29.75;
-		g.bandB[ 1 ]  = 30.75;
+		g.bandA[ 0 ]  = 0.5;
+		g.bandA[ 1 ]  = 1.5;
+		g.bandB[ 0 ]  = 33.5;
+		g.bandB[ 1 ]  = 34.5;
 	}
 
 	g.mmPerPixel = g.filmWidthMm / static_cast< double >( std::max( height, 1 ) );

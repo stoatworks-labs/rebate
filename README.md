@@ -3,7 +3,7 @@
 > **AI-assisted project.** This codebase was created with [Claude](https://claude.com/claude-code)
 > (Anthropic), directed and reviewed by a human author. The film is measured rather than
 > taken on trust: an offline harness drives the real plugin class in a headless GL context and
-> reads each claim back out of the picture, with eleven negative controls to show every check
+> reads each claim back out of the picture, with twelve negative controls to show every check
 > can fail. It has **never been loaded into Resolume on macOS**. On a Mac the only host it's met
 > is [oxbow](https://github.com/stoatworks-labs/oxbow), which is a real FFGL host but isn't
 > Resolume. On Windows, a build of v0.1.0 loads, registers and renders in Resolume Arena 7.27.1
@@ -107,9 +107,12 @@ does:
   positive goes warm, most of all in the shadows, and the shift shrinks toward the
   highlights, where the mask it was expecting would have been used up.
 - **The rebate.** The unexposed film round the frame, which prints black; the edge
-  print, pre-exposed at the factory as a latent image, which prints light on it;
-  and the sprocket holes, clear, which clip to black. The stock codes and frame numbers
-  are made up. No real manufacturer's name or mark appears anywhere.
+  print, pre-exposed at the factory as a latent image, which prints light on it in the
+  margins outside the holes, where 135 carries it; and the sprocket holes, clear, which
+  clip to black. They're KS holes, the kind 135 has: 2.794 mm across the strip and
+  1.981 mm along it, so on a strip running sideways they're taller than they are wide.
+  The stock codes and frame numbers are made up. No real manufacturer's name or mark
+  appears anywhere.
 
 ### The honest limit
 
@@ -254,10 +257,10 @@ it shows, in numbers:
 | `--grain` | variance against c(1 − c)/N at seven densities: at c = 0.5, **1.9158e-2** against **1.9159e-2** (5σ interval ±1.4e-4, 921,600 samples); zero to **1e-21** at fog and at Dmax; the peak is at c = 0.5 in every channel |
 | `--leak` | each half-stop of leak adds γ·log₁₀√2 = **0.0872** of density on the straight line, falling to **0.00001** 1.6 log units past the shoulder; the total never exceeds γ × latitude; at the edge the positive reads R 0.69 > G 0.30 > B 0.17 |
 | `--cross` | every one of 22 unclipped steps scans R > G > B; the missing mask falls from **0.769** density unexposed to **0.003** at Dmax and never rises; no orange (0.033 against C-41's 0.802); γ 1.23 against 0.58 |
-| `--rebate` | the holes transmit 1 − 1.4e-7; the border's density equals the unexposed picture's **exactly**; in the positive the holes and the border are **exactly 0** and the edge print reaches 0.85–1.0 |
+| `--rebate` | the holes transmit 1 − 1.4e-7 and measure **1.9810 mm** along the strip by **2.7940 mm** across it, 2e-4 mm from the KS hole's published 0.078 × 0.110 in; the border's density equals the unexposed picture's **exactly**; in the positive the holes and the border are **exactly 0** and the edge print reaches 0.84–1.0 |
 | `--seed` | the same seed and frame twice: **0** differing values; another seed or the next film frame: 93% differ; the 320×180 render is bit-identical to the top-left of a 1280×720 one |
 | `--resize` | across a resize to twice the raster the scanner's levels move exactly one smoothing step: **0.064493** of the way, α = 0.064493 |
-| `--negative` | eleven perturbed models — γ × 0.9, push at half rate, Mask Off, couplers never consumed, grain ∝ density, a leak added after the curve, a cool leak, a scanner expecting no mask, opaque holes, the seed left out of the hash, a resize that re-primes — each **fails** its check |
+| `--negative` | twelve perturbed models — γ × 0.9, push at half rate, Mask Off, couplers never consumed, grain ∝ density, a leak added after the curve, a cool leak, a scanner expecting no mask, opaque holes, holes turned through 90°, the seed left out of the hash, a resize that re-primes — each **fails** its check |
 | mutation | one character of the shipped GLSL (`Capacity ) - a` → `Capacity ) + a` in the mask) was caught by `--curve`, `--push`, `--mask`, `--grain`, `--leak` and `--rebate`, then reverted |
 | `tools/sweep.py` | all **22** controls measurably change the picture |
 | shaders | all 6, as the plugin assembles them, compile through `glslc` |

@@ -238,6 +238,20 @@ Apple's by up to 77 steps on single glyph pixels at 180 rows. It is a stand-in,
 and `--cpu` reports those rows rather than bounding them. Above those rasters the
 print is magnified, one bilinear level, and is mirrored.
 
+### ☠️ The standards' "width" runs across the film
+
+SMPTE 139 / ISO 491 give the KS hole as 0.110 in wide by 0.078 in high, and wide
+means ACROSS the film: the height is along it, in the direction of travel. Up to
+v0.3.0 the hole was drawn with its 2.794 mm along the strip and its 1.981 mm across,
+so on a sideways strip the holes were wider than tall, and the print bands sat in
+the 1.5 mm that left between the holes and the picture. Turned the right way the
+holes reach 4.80 mm in, which leaves 0.7 mm, so the print moved to the margins
+outside the holes, where 135 has it. Nothing caught it, because every check took
+the hole's size from `Frame.h`: `--rebate` now measures each hole out of the
+picture against the published inches, and the turned hole is a negative control.
+`Frame.h` names them `kPerfAlong` and `kPerfAcross` so the question cannot come
+up again.
+
 ### ☠️ Mutation-test only a committed tree
 
 pitch's trap, observed rather than repeated: the mutation below was applied to a
@@ -302,8 +316,9 @@ and the sRGB encode's `pow` (≈ 9 ULP, × 2.4 on decode) can account for.
 | `--cross` missing mask | (profile_b − profile_r) − (D_b − D_r) from the Negative view, per step | positive at the first step, smaller at the last, never rising by more than 2 read + 4 ULP | none |
 | `--cross` no mask, steep | cross orange vs C-41 orange; slopes | ratios (< 0.25; > 1.5×): the model gives 0.04 and 2.1×, so these are coarse by design — they say *which*, not *how much* | none |
 | `--rebate` holes | Negative-view transmittance at hole centres | **4 ULP of 1**: `exp2(0)` may be 3 ULP off | hole centres come from the geometry in mm, ≥ 5 px inside a hole at 180 rows |
+| `--rebate` hole size | each probed hole's length along the strip and across it: the hole fraction, from blue transmittance against the border's, summed along its centre row to the midpoints with its neighbours and down its centre column between the print band and the picture | **1e-3 mm** of KS's published 0.078 × 0.110 in: the model rounds 1.9812 to 1.981 (measured 2.0e-4); an edge is an analytic ramp a pixel wide, so its sum is exact to float | the windows come from the geometry at each raster; a hole that ran into the band or the picture would be cut short and fail |
 | `--rebate` border | border density vs unexposed picture density, same frame | **2 read**; measured 0 | none |
-| `--rebate` positive | holes and border exactly 0; print > 0.25 | **exact 0**: `expand()` returns 0 for p ≤ 0 by construction, sRGB-encode(0) = 0, and Mix = 1 skips `mix()`. Print: 0.85 at 180 rows, 1.0 at 720 — sub-pixel glyphs at 180 average down, which is why the floor is a quarter | the print band's rows are chosen from the geometry at each raster |
+| `--rebate` positive | holes and border exactly 0; print > 0.25 | **exact 0**: `expand()` returns 0 for p ≤ 0 by construction, sRGB-encode(0) = 0, and Mix = 1 skips `mix()`. Print: 0.84 at 180 rows, 1.0 at 720 — sub-pixel glyphs at 180 average down, which is why the floor is a quarter | the print band's rows are chosen from the geometry at each raster |
 | `--seed` | bit equality; fraction differing | **exact**: a pure function of integers; > 50% differ for another seed or frame (93% measured) | the cross-raster comparison is part of the check: cells are counted from the top-left pixel |
 | `--resize` | fraction of the way the levels moved in one frame after a resize | **1e-4** on α = 0.0645: each component is prev + (meas − prev)α, a few ULP of values ≤ 3 over a gap required to be ≥ 0.05 | the check resizes to twice whatever raster it is given |
 
@@ -320,7 +335,7 @@ is integer arithmetic and must agree bit for bit on any conforming driver.
 
 ### The negative controls
 
-`rbtest --negative` runs eleven, and `--perturb BITS` runs any check verbosely
+`rbtest --negative` runs twelve, and `--perturb BITS` runs any check verbosely
 against one. Each perturbs the *plugin's* model — a `Perturb` bit the shipped
 plugin carries at zero, or a real control — never the harness's expectation.
 
@@ -335,6 +350,7 @@ plugin carries at zero, or a real control — never the harness's expectation.
 | the leak's spectrum reversed | `--leak` warm: R 0.17 < B 0.69 |
 | the scanner expecting no mask under C-41 | `--cross`: 16 of 16 unclipped steps fail R > G > B (the perturbed model puts blue highest) |
 | opaque sprocket holes | `--rebate`: holes transmit 0.07 |
+| sprocket holes turned through 90°, as v0.3.0 and earlier drew them | `--rebate` hole size: 2.7940 along × 1.9810 across, 0.81 mm out; nothing else in `--rebate` notices |
 | the seed left out of the hash | `--seed`: another seed differs in 0 values |
 | a resize that re-primes the levels | `--resize`: the levels move 1.0 of the way, not 0.0645 |
 
@@ -382,9 +398,11 @@ clean before and after.
   off exponentially over Leak Spread frame heights, with a gentle lateral bump
   centred on the edge; Warmth 1 is (1, 0.30, 0.06) on the red, green and blue layers.
 - **The rebate:** the film's width fills the output's height; one frame, the rest of
-  the strip unexposed; the scene centre-cropped to the gate. 35 mm has the common
-  negative perforation and two print lines; 6x6 has a stock code and no frame numbers
-  (120 carries them on the backing paper).
+  the strip unexposed; the scene centre-cropped to the gate. 35 mm has KS
+  perforations, as 135 does, 2.794 mm across the strip by 1.981 mm along it, and two
+  print lines in the margins outside the holes, where 135 carries them: the 0.7 mm
+  between the holes and the picture is too narrow for a 1 mm line. 6x6 has a stock
+  code and no frame numbers (120 carries them on the backing paper).
 - **Output alpha is 1** where the scan is shown: film is opaque.
 - **No factory presets.** The Stock menu is the preset list the spec asked for,
   described by parameters in `Model.cpp`.
@@ -460,12 +478,14 @@ and 333×187 by hand.
   R 0.69 > G 0.30 > B 0.17 at the edge.
 - **Cross.** 22 of 22 unclipped steps R > G > B; missing mask 0.769 → 0.003,
   never rising; orange 0.033 against 0.802; slope 1.231 against 0.580.
-- **Rebate.** Holes 1 − 1.4e-7; border = unexposed picture exactly; positive holes
-  and border exactly 0; print 0.85 (180 rows) / 1.00 (720 rows); print off, exactly 0.
+- **Rebate.** Holes 1 − 1.4e-7, each 1.9810 × 2.7940 mm along × across, 2.0e-4 from
+  KS; border = unexposed picture exactly; positive holes and border exactly 0; print
+  0.84 (180 rows) / 1.00 (720 rows); print off, exactly 0. (Re-measured 2026-10-13
+  when the holes were turned the right way up and the print moved outside them.)
 - **Seed.** Bit-identical repeats; 93% differ for another seed or frame; 320×180
   bit-identical to the corner of 640×360 and 1280×720.
 - **Resize.** 0.064493 of the way against α = 0.064493, all six level components.
-- **Negative controls.** All eleven fail their check.
+- **Negative controls.** All twelve fail their check.
 - **Mutation.** Caught by six checks (above).
 - **No dead controls**, all 22, with the four About buttons skipped.
 - **Every shader compiles** through `glslc`, as the plugin assembles it.

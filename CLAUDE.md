@@ -47,7 +47,7 @@ scanner.
 - Grain variance c(1-c)/N, peak at 0.5: `./build/rbtest --grain`
 - The leak follows the curve and is warm: `./build/rbtest --leak`
 - Cross-processing scans warm as predicted: `./build/rbtest --cross`
-- Holes black, border unexposed, edge print light: `./build/rbtest --rebate`
+- Holes KS-sized and black, border unexposed, edge print light: `./build/rbtest --rebate`
 - Grain reproduces from its seed, at any raster: `./build/rbtest --seed`
 - The scanner's levels survive a resize: `./build/rbtest --resize`
 - The checks can fail: `./build/rbtest --negative`; one perturbation verbosely:

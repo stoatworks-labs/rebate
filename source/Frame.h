@@ -15,10 +15,12 @@
 	number from here; the text is a small bitmap built on the CPU from the
 	fleet's 5x7 font and uploaded once whenever it changes.
 
-	The perforation is the common negative perforation, 2.794 x 1.981 mm on a
-	4.75 mm pitch, eight to a 38 mm frame, 2.01 mm in from each edge. The edge
-	print is invented: a stock code, and frame numbers every half frame with
-	an A on the half. No real manufacturer's name or mark appears anywhere.
+	The perforation is KS, the one 135 still film carries (SMPTE 139 /
+	ISO 491): 2.794 mm ACROSS the strip by 1.981 mm along it (0.110 x 0.078
+	in; the standards' "width" is the one across), on a 4.75 mm pitch, eight
+	to a 38 mm frame, 2.01 mm in from each edge. The edge print is invented: a
+	stock code, and frame numbers every half frame with an A on the half. No
+	real manufacturer's name or mark appears anywhere.
 */
 namespace rebate::frame
 {
@@ -31,8 +33,8 @@ enum Format
 };
 
 constexpr double kPerfPitch  = 4.75;
-constexpr double kPerfWidth  = 2.794;///< along the strip
-constexpr double kPerfHeight = 1.981;///< across the strip
+constexpr double kPerfAlong  = 1.981;///< along the strip, in u: the standards' height
+constexpr double kPerfAcross = 2.794;///< across the strip, in v: the standards' width
 constexpr double kPerfEdge   = 2.01; ///< film edge to the near side of the hole
 constexpr double kPerfRadius = 0.5;
 

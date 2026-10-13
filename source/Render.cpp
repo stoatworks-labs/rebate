@@ -302,8 +302,8 @@ struct FilmUniforms
 };
 
 constexpr float kPerfPitch  = 4.75f;
-constexpr float kPerfWidth  = 2.794f;
-constexpr float kPerfHeight = 1.981f;
+constexpr float kPerfAlong  = 1.981f;
+constexpr float kPerfAcross = 2.794f;
 constexpr float kPerfEdge   = 2.01f;
 constexpr float kPerfRadius = 0.5f;
 
@@ -322,14 +322,18 @@ float overlap( float a0, float a1, float b0, float b1 )
 }
 
 //= mirrored: kFilmBody holeCoverage() in Shaders.cpp
-float holeCoverage( const FilmUniforms& f, float fx, float fy )
+float holeCoverage( const FilmUniforms& f, int perturb, float fx, float fy )
 {
+	const bool turned  = ( perturb & 1024 ) != 0;
+	const float along  = turned ? kPerfAcross : kPerfAlong;
+	const float across = turned ? kPerfAlong : kPerfAcross;
+
 	const float k   = std::floor( fx / kPerfPitch );
 	const float cu  = ( k + 0.5f ) * kPerfPitch;
-	const float top = kPerfEdge + 0.5f * kPerfHeight;
+	const float top = kPerfEdge + 0.5f * across;
 	const float cv  = fy < 0.5f * f.filmWidth ? top : f.filmWidth - top;
-	const float dx  = std::fabs( fx - cu ) - ( 0.5f * kPerfWidth - kPerfRadius );
-	const float dy  = std::fabs( fy - cv ) - ( 0.5f * kPerfHeight - kPerfRadius );
+	const float dx  = std::fabs( fx - cu ) - ( 0.5f * along - kPerfRadius );
+	const float dy  = std::fabs( fy - cv ) - ( 0.5f * across - kPerfRadius );
 	const float mx  = std::max( dx, 0.0f ), my = std::max( dy, 0.0f );
 	const float sdf = std::sqrt( mx * mx + my * my ) + std::min( std::max( dx, dy ), 0.0f ) - kPerfRadius;
 	return std::clamp( 0.5f - sdf / f.mmPerPixel, 0.0f, 1.0f );
@@ -544,7 +548,7 @@ void Film( const Uniforms& u, const float* picture, const TextMips& text, float*
 					scene[ k ] = 0.25f * ( a[ k ] + b[ k ] + c[ k ] + d[ k ] );
 
 				if( f.holes != 0 && ( u.perturb & 64 ) == 0 )
-					filmPart = 1.0f - holeCoverage( f, fx, fy );
+					filmPart = 1.0f - holeCoverage( f, u.perturb, fx, fy );
 
 				latent = std::max( edgePrint( f, text, fx, fy, f.bandA, 0.0f ), edgePrint( f, text, fx, fy, f.bandB, 7.0f ) );
 			}

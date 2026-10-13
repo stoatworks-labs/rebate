@@ -202,8 +202,8 @@ uniform float LeakSpread;    //falloff length, frame heights
 uniform vec3 LeakWeights;    //the leak's spectrum on the three layers
 
 const float PerfPitch  = 4.75;
-const float PerfWidth  = 2.794;
-const float PerfHeight = 1.981;
+const float PerfAlong  = 1.981;//along the strip, in u
+const float PerfAcross = 2.794;//across it, in v
 const float PerfEdge   = 2.01;
 const float PerfRadius = 0.5;
 
@@ -223,14 +223,16 @@ float overlap( float a0, float a1, float b0, float b1 )
 }
 
 //How much of this pixel is a perforation, from a rounded rectangle's signed
-//distance ramped over one pixel.
+//distance ramped over one pixel. size.x runs along the strip (u), size.y
+//across it (v).
 float holeCoverage( vec2 film )
 {
+	vec2 size = ( Perturb & 1024 ) != 0 ? vec2( PerfAcross, PerfAlong ) : vec2( PerfAlong, PerfAcross );
 	float k   = floor( film.x / PerfPitch );
 	float cu  = ( k + 0.5 ) * PerfPitch;
-	float top = PerfEdge + 0.5 * PerfHeight;
+	float top = PerfEdge + 0.5 * size.y;
 	float cv  = film.y < 0.5 * FilmWidth ? top : FilmWidth - top;
-	vec2 d    = abs( film - vec2( cu, cv ) ) - vec2( 0.5 * PerfWidth - PerfRadius, 0.5 * PerfHeight - PerfRadius );
+	vec2 d    = abs( film - vec2( cu, cv ) ) - ( 0.5 * size - PerfRadius );
 	float sdf = length( max( d, vec2( 0.0 ) ) ) + min( max( d.x, d.y ), 0.0 ) - PerfRadius;
 	return clamp( 0.5 - sdf / MmPerPixel, 0.0, 1.0 );
 }
@@ -812,12 +814,13 @@ function computeGeometry(format, width, height) {
     g.holes = false;
     g.bandA = [0.9, 1.9];
   } else {
-    //35 mm: a 36 x 24 frame centred on a 35 mm strip.
+    //35 mm: a 36 x 24 frame centred on a 35 mm strip. The edge print sits
+    //in the margins outside the holes, as on 135.
     g.filmWidthMm = 35.0;
     g.gate = [-18.0, 5.5, 18.0, 29.5];
     g.holes = true;
-    g.bandA = [4.25, 5.25];
-    g.bandB = [29.75, 30.75];
+    g.bandA = [0.5, 1.5];
+    g.bandB = [33.5, 34.5];
   }
 
   g.mmPerPixel = g.filmWidthMm / Math.max(height, 1);
@@ -1459,7 +1462,7 @@ mountDemo({
     'The clips are 8-bit, so there is nothing brighter than white in them for Exposure to pull back down. The plugin keeps a float input exactly, and its own harness drives it with an HDR wedge; that is not something this page can show.',
     'The plugin\'s About block — its name, version and links, drawn by the host as parameters — is not here.',
     'Start with View → Negative to see the orange mask, then Leak Amount, then Stock → Expired 400 and Process → Cross, in that order: it is the user guide\'s walk, and the Presets menu has each step. Ramps and steps is the clip where the grain\'s mid-tone peak and the curve\'s toe and shoulder are easiest to read.',
-    'The model\'s numerical proof — the curve\'s slope read back as 0.57948 for a γ of 0.58, a neutral wedge through the mask coming out neutral to 1.1e-6, grain variance matching c(1 − c)/N over 921,600 samples, eleven perturbed models each caught — is an offline harness in the repository. Nothing on this page measures anything.',
+    'The model\'s numerical proof — the curve\'s slope read back as 0.57948 for a γ of 0.58, a neutral wedge through the mask coming out neutral to 1.1e-6, grain variance matching c(1 − c)/N over 921,600 samples, twelve perturbed models each caught — is an offline harness in the repository. Nothing on this page measures anything.',
   ],
 
   createRenderer,

@@ -154,8 +154,8 @@ uniform float LeakSpread;    //falloff length, frame heights
 uniform vec3 LeakWeights;    //the leak's spectrum on the three layers
 
 const float PerfPitch  = 4.75;
-const float PerfWidth  = 2.794;
-const float PerfHeight = 1.981;
+const float PerfAlong  = 1.981;//along the strip, in u
+const float PerfAcross = 2.794;//across it, in v
 const float PerfEdge   = 2.01;
 const float PerfRadius = 0.5;
 
@@ -175,14 +175,16 @@ float overlap( float a0, float a1, float b0, float b1 )
 }
 
 //How much of this pixel is a perforation, from a rounded rectangle's signed
-//distance ramped over one pixel.
+//distance ramped over one pixel. size.x runs along the strip (u), size.y
+//across it (v).
 float holeCoverage( vec2 film )
 {
+	vec2 size = ( Perturb & 1024 ) != 0 ? vec2( PerfAcross, PerfAlong ) : vec2( PerfAlong, PerfAcross );
 	float k   = floor( film.x / PerfPitch );
 	float cu  = ( k + 0.5 ) * PerfPitch;
-	float top = PerfEdge + 0.5 * PerfHeight;
+	float top = PerfEdge + 0.5 * size.y;
 	float cv  = film.y < 0.5 * FilmWidth ? top : FilmWidth - top;
-	vec2 d    = abs( film - vec2( cu, cv ) ) - vec2( 0.5 * PerfWidth - PerfRadius, 0.5 * PerfHeight - PerfRadius );
+	vec2 d    = abs( film - vec2( cu, cv ) ) - ( 0.5 * size - PerfRadius );
 	float sdf = length( max( d, vec2( 0.0 ) ) ) + min( max( d.x, d.y ), 0.0 ) - PerfRadius;
 	return clamp( 0.5 - sdf / MmPerPixel, 0.0, 1.0 );
 }
