@@ -141,8 +141,9 @@ scanner.
 `wrangler.toml` with `cf-run npx wrangler deploy` — no build step; what is committed
 is what is served. `demo/vendor/` is the shared kit from
 `~/Projects/infrastructure/stoatworks-backend/resolume-demo/` (plus
-`support-footer/support-footer.js`) and is not a place to edit. There is no deploy
-workflow yet: a push to main does NOT redeploy it.
+`support-footer/support-footer.js`) and is not a place to edit.
+`.github/workflows/deploy.yml` redeploys it on every push to main that touches more
+than `docs/` and Markdown, so a change to `plugin.js` is live once it lands.
 
 Verify a deploy **by content, never by status code** — a stale page answers 200:
 

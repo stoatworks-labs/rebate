@@ -176,6 +176,19 @@ if [ -f demo/tools/check_shaders.py ]; then
 		grep -v '^ok' "$log" | sed 's/^/      /'
 	fi
 	rm -f "$log"
+
+	# The page is one ES module: a syntax error anywhere in it and nothing
+	# renders, with no error a reader of the shaders would see. Parsed from
+	# stdin as a module on purpose -- `node --check demo/plugin.js` exits 0 on
+	# a file that does not parse (node 26.5.1).
+	if ! command -v node >/dev/null 2>&1; then
+		printf '   skipped: node not installed, so plugin.js was not parsed\n'
+	elif err="$( node --input-type=module --check <demo/plugin.js 2>&1 )"; then
+		pass "demo/plugin.js parses as an ES module"
+	else
+		fail "demo/plugin.js does not parse -- the page renders nothing"
+		printf '%s\n' "$err" | head -5 | sed 's/^/      /'
+	fi
 else
 	printf '   skipped: no demo/\n'
 fi

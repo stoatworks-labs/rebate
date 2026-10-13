@@ -26,7 +26,10 @@ never looks at the JS one.
    reasoning (why the grain is integer hashing, why the edge print reads with
    explicit gradients, why the scan returns early at Mix 1).
    None of the GLSL contains a backtick or a backslash, so the JS side must not
-   contain a backslash either; one there could only be hiding a difference.
+   contain either; a backslash there could only be hiding a difference, and a
+   backtick ends the literal. A backtick in a C++ comment once compared equal
+   here -- the pattern reads on to the literal's real end -- while the page
+   stopped parsing and rendered nothing.
 2. The version line, which is a plain string literal on both sides.
 3. The assembly: which body each pass is built from and whether it gets the
    model library. `Vertex()` .. `Scan()` in the C++, the `assemble(...)` table
@@ -92,6 +95,9 @@ def from_js(source, name):
     if match is None:
         return None, None
     body = match.group(1)
+    tick = body.find("`")
+    if tick >= 0:
+        return None, f"backtick at line {body[:tick].count(chr(10)) + 1}, which ends the template literal"
     stray = body.find("\\")
     if stray >= 0:
         return None, f"backslash at line {body[:stray].count(chr(10)) + 1}"

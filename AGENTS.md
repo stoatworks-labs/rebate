@@ -252,6 +252,16 @@ picture against the published inches, and the turned hole is a negative control.
 `Frame.h` names them `kPerfAlong` and `kPerfAcross` so the question cannot come
 up again.
 
+### ☠️ A backtick in a shader comment blanks the demo
+
+`plugin.js` holds each shader piece in a JS template literal, so a backtick in a
+GLSL comment ends it, and the whole module fails to parse: the page renders nothing,
+with only a `SyntaxError` in the console. `check_shaders.py` compared it equal,
+because its pattern read on to the literal's real end and the C++ carried the same
+text, and `node --check demo/plugin.js` exits 0 on the broken file. The checker now
+rejects a backtick in a shader body, and `verify.sh` parses the page with
+`node --input-type=module --check`. No backticks in GLSL, then.
+
 ### ☠️ Mutation-test only a committed tree
 
 pitch's trap, observed rather than repeated: the mutation below was applied to a
