@@ -238,9 +238,11 @@ and the scan is opaque.
 
 ## Status
 
-**v0.3.0, 4 October 2026, and still early days.** v0.3.0 adds the OpenFX build's
-**Encoding** control (sRGB / Linear), and v0.2.0, the same day, added the OpenFX build.
-The Resolume build renders as it did at v0.1.0.
+**v0.3.1, 19 October 2026, and still early days.** v0.3.1 turns the sprocket holes the
+right way round in both builds: every release before it drew them through 90°. v0.3.0
+added the OpenFX build's **Encoding** control (sRGB / Linear), and v0.2.0, the same day,
+added the OpenFX build. Apart from the holes and the edge print, the Resolume build
+renders as it did at v0.1.0.
 
 ### Measured offline, on macOS
 
