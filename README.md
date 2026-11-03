@@ -18,6 +18,8 @@ Colour negative film, and the scan of it, as an FFGL effect for
 DaVinci Resolve, Vegas, Nuke and Natron. You get the orange mask, the grain, the light leaks
 and the expired stock, and nobody has to wait a week for the lab to send the scans back.
 
+The [project page](https://stoatworks-labs.com/software/rebate/) has the downloads, the [user guide](https://stoatworks-labs.com/software/rebate/guide/) and the video.
+
 ![A test card on a strip of 35 mm colour negative, scanned and inverted: fine grain, a warm light leak burning in from the right edge across the rebate, sprocket holes, and edge print reading PT400, 11A, >12 and 12A](docs/hero.png)
 
 <sub>One frame, rendered by `rbtest`, the offline harness, rather than captured from
